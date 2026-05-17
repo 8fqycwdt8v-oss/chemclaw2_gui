@@ -47,8 +47,15 @@ def _auth_header() -> dict[str, str]:
 
 
 def _client() -> httpx.Client:
+    # retries=2 covers connection-level failures (network blips during rolling
+    # deploys, transient DNS) without affecting HTTP-status errors. Anything
+    # that returns an HTTP response (including 5xx) does NOT retry — that's
+    # surfaced to the caller as an HTTPError so the UI can show a real message.
     return httpx.Client(
-        base_url=CHEMCLAW2_API_URL, timeout=REQUEST_TIMEOUT_S, headers=_auth_header()
+        base_url=CHEMCLAW2_API_URL,
+        timeout=REQUEST_TIMEOUT_S,
+        headers=_auth_header(),
+        transport=httpx.HTTPTransport(retries=2),
     )
 
 
@@ -70,8 +77,15 @@ def list_wiki_pages(
         return r.json()
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def list_projects() -> list[str]:
-    """Fetch the distinct project names known to chemclaw2."""
+    """Fetch the distinct project names known to chemclaw2.
+
+    Cached for 60s because (a) projects rarely churn and (b) this fires on
+    every rerun of the wiki list page. Globally cached (no per-user key)
+    because the projects list is the same for everyone. To invalidate after
+    creating a page with a new project, call `list_projects.clear()`.
+    """
     with _client() as c:
         r = c.get("/api/wiki", params={"projects": "true"})
         r.raise_for_status()
@@ -100,7 +114,11 @@ def upsert_wiki_page(slug: str, title: str, markdown: str) -> dict[str, Any]:
     with _client() as c:
         r = c.post("/api/wiki", json=body)
         r.raise_for_status()
-        return r.json()
+        result: dict[str, Any] = r.json()
+    # New page may have introduced a new project — bust the projects cache so
+    # the wiki sidebar dropdown picks it up on next render.
+    list_projects.clear()
+    return result
 
 
 def patch_wiki_page(
@@ -124,7 +142,11 @@ def patch_wiki_page(
     with _client() as c:
         r = c.patch(f"/api/wiki/{slug}", json=body)
         r.raise_for_status()
-        return r.json()
+        result: dict[str, Any] = r.json()
+    # Re-assigning project may add/remove a name from the global set.
+    if project is not None:
+        list_projects.clear()
+    return result
 
 
 def search_text(q: str, limit: int = 20) -> dict[str, Any]:
@@ -163,6 +185,25 @@ def search_reaction(
         )
         r.raise_for_status()
         return r.json()
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def get_backend_health() -> dict[str, Any]:
+    """Fetch chemclaw2's /api/health. Unauthenticated route on chemclaw2's side,
+    but we still send our usual headers — chemclaw2 just ignores them.
+
+    Returns the raw payload (`ok`, `db`, `fingerprint_backlog`, `worker_warn`)
+    or a synthetic `{ok: False, error: ...}` if chemclaw2 is unreachable.
+    Cached for 30s so each fragment rerun doesn't pile on requests.
+    """
+    try:
+        with _client() as c:
+            r = c.get("/api/health", timeout=5)
+            r.raise_for_status()
+            data: dict[str, Any] = r.json()
+            return data
+    except Exception as exc:  # noqa: BLE001 — any failure → degraded health
+        return {"ok": False, "error": str(exc)}
 
 
 def stream_chat(

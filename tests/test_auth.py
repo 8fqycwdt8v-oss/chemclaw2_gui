@@ -1,7 +1,7 @@
 """Auth verification — happy path and rejection paths.
 
 We avoid network by constructing a local RSA keypair, registering it as a
-fake JWKS via monkeypatch, and minting tokens with python-jose.
+fake JWKS via monkeypatch, and minting tokens with PyJWT.
 """
 
 import os
@@ -11,52 +11,66 @@ os.environ.setdefault("CHEMCLAW2_IDP_DOMAIN", "fake.example.com")
 os.environ.setdefault("CHEMCLAW2_IDP_AUDIENCE", "api://test-audience")
 os.environ.setdefault("CHEMCLAW2_API_URL", "http://nope")
 
-from typing import Any  # noqa: E402
-
+import jwt  # noqa: E402
 import pytest  # noqa: E402
 from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
-from jose import jwk, jwt  # noqa: E402
+from jwt import PyJWK  # noqa: E402
 
 from bff import auth as bff_auth  # noqa: E402
 
 
 @pytest.fixture
-def rsa_keypair() -> tuple[str, dict[str, Any]]:
+def rsa_keypair() -> tuple[str, RSAPrivateKey]:
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_pem = key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
-    public_pem = key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
-    public_jwk = jwk.construct(public_pem, algorithm="RS256").to_dict()
-    public_jwk["kid"] = "test-kid"
-    public_jwk["alg"] = "RS256"
-    public_jwk["use"] = "sig"
-    return private_pem, public_jwk
+    return private_pem, key
 
 
 @pytest.fixture(autouse=True)
 def stub_jwks(
-    rsa_keypair: tuple[str, dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    rsa_keypair: tuple[str, RSAPrivateKey], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Replace bff_auth._jwks with a stub that mimics lru_cache's interface.
+    """Replace the PyJWK signing-key lookup with one that always returns our public key.
 
-    Production code calls `_jwks.cache_clear()` on the kid-not-found rotation
-    path. The plain lambda lacks that attribute, so we attach a no-op.
+    Production code calls `_jwk_client.get_signing_key_from_jwt(token)`. We stub
+    that method so tests don't need a live JWKS endpoint.
     """
-    _, public_jwk = rsa_keypair
+    _, key = rsa_keypair
+    pyjwk = PyJWK.from_json(
+        '{"kty":"RSA","alg":"RS256","use":"sig","kid":"test-kid",'
+        f'"n":"{_b64uint(key.public_key().public_numbers().n)}",'
+        f'"e":"{_b64uint(key.public_key().public_numbers().e)}"}}'
+    )
 
-    def fake_jwks() -> dict[str, Any]:
-        return {"keys": [public_jwk]}
+    def fake_lookup(_self: object, token: str) -> PyJWK:
+        # Reject obviously-malformed tokens the same way PyJWT would.
+        header = jwt.get_unverified_header(token)
+        if header.get("kid") != "test-kid":
+            from jwt.exceptions import PyJWKClientError
 
-    fake_jwks.cache_clear = lambda: None  # type: ignore[attr-defined]
-    monkeypatch.setattr(bff_auth, "_jwks", fake_jwks)
+            raise PyJWKClientError("kid not found")
+        return pyjwk
+
+    monkeypatch.setattr(
+        bff_auth._jwk_client,
+        "get_signing_key_from_jwt",
+        fake_lookup.__get__(bff_auth._jwk_client),
+    )
+
+
+def _b64uint(n: int) -> str:
+    """Base64url-encode an unsigned int as a JWK n/e component."""
+    import base64
+
+    length = (n.bit_length() + 7) // 8
+    return base64.urlsafe_b64encode(n.to_bytes(length, "big")).rstrip(b"=").decode()
 
 
 def _mint(private_pem: str, *, sub: str = "user-1", aud: str = "api://test-audience") -> str:
@@ -68,14 +82,14 @@ def _mint(private_pem: str, *, sub: str = "user-1", aud: str = "api://test-audie
     )
 
 
-def test_valid_token_returns_claims(rsa_keypair: tuple[str, dict[str, Any]]) -> None:
+def test_valid_token_returns_claims(rsa_keypair: tuple[str, RSAPrivateKey]) -> None:
     private_pem, _ = rsa_keypair
     claims = bff_auth.verify_token(_mint(private_pem))
     assert claims["sub"] == "user-1"
     assert claims["email"] == "u@example.com"
 
 
-def test_wrong_audience_rejected(rsa_keypair: tuple[str, dict[str, Any]]) -> None:
+def test_wrong_audience_rejected(rsa_keypair: tuple[str, RSAPrivateKey]) -> None:
     private_pem, _ = rsa_keypair
     token = _mint(private_pem, aud="api://other")
     with pytest.raises(HTTPException) as exc:
@@ -83,7 +97,7 @@ def test_wrong_audience_rejected(rsa_keypair: tuple[str, dict[str, Any]]) -> Non
     assert exc.value.status_code == 401
 
 
-def test_tampered_signature_rejected(rsa_keypair: tuple[str, dict[str, Any]]) -> None:
+def test_tampered_signature_rejected(rsa_keypair: tuple[str, RSAPrivateKey]) -> None:
     private_pem, _ = rsa_keypair
     token = _mint(private_pem)
     # Reverse the signature segment — guaranteed to invalidate it.
@@ -94,7 +108,7 @@ def test_tampered_signature_rejected(rsa_keypair: tuple[str, dict[str, Any]]) ->
     assert exc.value.status_code == 401
 
 
-def test_tampered_payload_rejected(rsa_keypair: tuple[str, dict[str, Any]]) -> None:
+def test_tampered_payload_rejected(rsa_keypair: tuple[str, RSAPrivateKey]) -> None:
     private_pem, _ = rsa_keypair
     token = _mint(private_pem)
     # Swap payload for one minted with a different audience; signature no longer matches.
@@ -110,4 +124,17 @@ def test_tampered_payload_rejected(rsa_keypair: tuple[str, dict[str, Any]]) -> N
 def test_malformed_token_rejected() -> None:
     with pytest.raises(HTTPException) as exc:
         bff_auth.verify_token("not-a-jwt")
+    assert exc.value.status_code == 401
+
+
+def test_unknown_kid_rejected(rsa_keypair: tuple[str, RSAPrivateKey]) -> None:
+    private_pem, _ = rsa_keypair
+    token = jwt.encode(
+        {"sub": "u", "aud": "api://test-audience", "iat": 0, "exp": 9999999999},
+        private_pem,
+        algorithm="RS256",
+        headers={"kid": "unknown-kid"},
+    )
+    with pytest.raises(HTTPException) as exc:
+        bff_auth.verify_token(token)
     assert exc.value.status_code == 401

@@ -1,28 +1,17 @@
 services:
-  bff:
-    build:
-      context: .
-      dockerfile: Dockerfile.bff
-    env_file: .env
-    environment:
-      # Override for compose: BFF reaches chemclaw2 on the host network
-      CHEMCLAW2_API_URL: ${CHEMCLAW2_API_URL:-http://host.docker.internal:8080}
-    ports:
-      - "8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
   streamlit:
     build:
       context: .
       dockerfile: Dockerfile.streamlit
+    env_file: .env
     environment:
-      STREAMLIT_BFF_URL: http://bff:8000
+      # Override for compose: Streamlit reaches chemclaw2 on the host network
+      CHEMCLAW2_API_URL: ${CHEMCLAW2_API_URL:-http://host.docker.internal:8080}
       STREAMLIT_LOGIN_PROVIDER: ${STREAMLIT_LOGIN_PROVIDER:-microsoft}
     ports:
       - "8501:8501"
     volumes:
       # Mount real secrets locally without baking into the image
       - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
-    depends_on:
-      - bff
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

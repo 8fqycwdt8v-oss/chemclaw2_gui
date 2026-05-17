@@ -8,11 +8,7 @@ dependencies = [
     "streamlit-ketcher>=0.0.1",
     "streamlit-markdown>=1.0",
     "sseclient-py>=1.8",
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
     "httpx>=0.27",
-    "pyjwt[crypto]>=2.10",
-    "pydantic>=2.9",
     "rdkit>=2024.9.1",
     "drfp>=0.3.7",
 ]

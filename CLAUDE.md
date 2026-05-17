@@ -30,6 +30,20 @@ Streamlit GUI + FastAPI BFF for chemclaw2.
 - No database client. State is held in Streamlit session_state and chemclaw2's Postgres.
 - No bespoke chat framework. `st.chat_message` + `st.fragment` + a hand-rolled SSE iterator is the whole thing.
 
+## Deliberate v1 limitations
+
+- **No `beforeunload` guard for unsaved wiki edits.** Pure-Streamlit can't hook
+  the browser's `beforeunload` event without a custom JS component, which the
+  anti-features list forbids. The wiki edit form catches the "accidentally clicked
+  Back" case via a dirty marker + confirmation, but tab close / browser back
+  still discards unsaved changes. The Tiptap WikiEditor in the deleted TS GUI
+  had this guard via React's `useEffect`. Acceptable trade-off; revisit only if
+  users actually lose work.
+- **No token-by-token streaming.** chemclaw2 doesn't pass
+  `include_partial_messages=True` to its claude-agent-sdk options today, so each
+  text block arrives complete. The GUI renders incrementally per block but not
+  per token. Flagged as a chemclaw2 BACKLOG item.
+
 ## Open architecture question
 
 chemclaw2 is now itself a FastAPI Python backend (post-`2b3ab16`). The BFF's

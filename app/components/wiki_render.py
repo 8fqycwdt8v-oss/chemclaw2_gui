@@ -52,6 +52,28 @@ def parse(markdown: str) -> list[Block]:
     return blocks
 
 
+def format_citations(citations: list[dict[str, object]]) -> list[str]:
+    """Render each citation as a numbered markdown bullet for the References footer.
+
+    Pure function — tests can verify shape without booting Streamlit.
+
+    Citation fields per chemclaw2 contract:
+      label (str), source_type (str), source_id (str | None), disputed (bool).
+    """
+    lines: list[str] = []
+    for i, c in enumerate(citations, start=1):
+        label = str(c.get("label") or "(no label)")
+        source_type = str(c.get("source_type") or "")
+        source_id = c.get("source_id")
+        source = source_type
+        if source_id:
+            source = f"{source_type} / {source_id}"
+        disputed = " 🚩 disputed" if c.get("disputed") else ""
+        suffix = f" — *{source}*" if source else ""
+        lines.append(f"**[{i}]** {label}{suffix}{disputed}")
+    return lines
+
+
 def extract_markdown(page: dict[str, object]) -> str:
     """Pull the markdown source from a wiki page payload.
 

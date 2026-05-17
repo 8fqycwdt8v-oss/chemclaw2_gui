@@ -6,16 +6,24 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from streamlit_ketcher import st_ketcher
 
-from app.components.api_client import get_wiki_page, list_wiki_pages, upsert_wiki_page
+from app.components.api_client import (
+    get_wiki_page,
+    list_projects,
+    list_wiki_pages,
+    patch_wiki_page,
+    upsert_wiki_page,
+)
 from app.components.wiki_render import (
     MarkdownBlock,
     MoleculeBlock,
     ReactionBlock,
     extract_markdown,
+    format_citations,
     parse,
 )
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+MATURITY_OPTIONS = ["exploratory", "validated", "production"]
 
 
 def _render_blocks(markdown: str, key_prefix: str) -> None:
@@ -35,9 +43,22 @@ def _render_blocks(markdown: str, key_prefix: str) -> None:
 
 def _list_view() -> None:
     st.subheader("Pages")
+
+    with st.sidebar:
+        st.caption("Filters")
+        try:
+            projects = list_projects()
+        except httpx.HTTPError:
+            projects = []
+        project_choices = ["(all projects)", *projects]
+        chosen = st.selectbox("Project", project_choices, key="wiki_project_filter")
+        project = None if chosen == "(all projects)" else chosen
+        include_archived = st.checkbox(
+            "Include archived", value=False, key="wiki_include_archived"
+        )
+
     col_search, col_new = st.columns([3, 1])
     with col_search:
-        # Search is a nice-to-have on this page; defer wiring to /search page for v1.
         st.caption("Use the Search page for full-text wiki search.")
     with col_new:
         if st.button("New page", type="primary"):
@@ -45,23 +66,90 @@ def _list_view() -> None:
             st.rerun()
 
     try:
-        data = list_wiki_pages()
+        data = list_wiki_pages(project=project, include_archived=include_archived)
     except httpx.HTTPError as exc:
         st.error(f"Failed to load wiki pages: {exc}")
         return
 
     pages = data.get("pages", [])
     if not pages:
-        st.info("No wiki pages yet. Click **New page** to create one.")
+        st.info("No wiki pages match these filters.")
         return
 
     for page in pages:
         slug = page["slug"]
         title = page.get("title", slug)
-        if st.button(f"📄 {title}", key=f"open_{slug}", use_container_width=True):
+        prefix = "📦 " if page.get("archived") else "📄 "
+        review_tag = " · _needs review_" if page.get("needs_review") else ""
+        if st.button(
+            f"{prefix}{title}{review_tag}", key=f"open_{slug}", use_container_width=True
+        ):
             st.session_state.wiki_slug = slug
             st.session_state.wiki_mode = "view"
             st.rerun()
+
+
+def _metadata_expander(slug: str, page: dict) -> None:
+    """PATCH metadata form (needs_review / archived / maturity / project)."""
+    with st.expander("Metadata", expanded=False):
+        current_maturity = page.get("maturity") or "exploratory"
+        try:
+            default_idx = MATURITY_OPTIONS.index(current_maturity)
+        except ValueError:
+            # Backend allows free-text; surface unknown values + fall back gracefully.
+            st.caption(f"Stored value `{current_maturity}` not in standard list.")
+            default_idx = 0
+
+        col1, col2 = st.columns(2)
+        with col1:
+            needs_review = st.checkbox(
+                "Needs review", value=bool(page.get("needs_review")), key=f"meta_review_{slug}"
+            )
+            archived = st.checkbox(
+                "Archived", value=bool(page.get("archived")), key=f"meta_archived_{slug}"
+            )
+        with col2:
+            maturity = st.selectbox(
+                "Maturity", MATURITY_OPTIONS, index=default_idx, key=f"meta_maturity_{slug}"
+            )
+            project = st.text_input(
+                "Project", value=page.get("project") or "", key=f"meta_project_{slug}"
+            )
+
+        if st.button("Save metadata", key=f"meta_save_{slug}"):
+            # Only send fields the user actually changed; reduces noise in audit log.
+            changes: dict[str, object] = {}
+            if needs_review != bool(page.get("needs_review")):
+                changes["needs_review"] = needs_review
+            if archived != bool(page.get("archived")):
+                changes["archived"] = archived
+            if maturity != current_maturity:
+                changes["maturity"] = maturity
+            if (project or None) != (page.get("project") or None):
+                # Backend treats empty string as a value; coerce to None for "unset".
+                changes["project"] = project or None
+
+            if not changes:
+                st.info("No metadata changes to save.")
+                return
+            try:
+                patch_wiki_page(slug, **changes)
+            except httpx.HTTPError as exc:
+                st.error(f"Metadata save failed: {exc}")
+                return
+            st.success("Metadata saved.")
+            st.rerun()
+
+
+def _citations_footer(page: dict) -> None:
+    """Render the page's citations as a numbered ## References footer."""
+    lines = format_citations(page.get("citations") or [])
+    if not lines:
+        return
+    st.markdown("---")
+    st.markdown("## References")
+    for line in lines:
+        st.markdown(line)
 
 
 def _view_or_edit(slug: str) -> None:
@@ -73,26 +161,42 @@ def _view_or_edit(slug: str) -> None:
 
     markdown = extract_markdown(page)
     title = page.get("title", slug)
+    mode = st.session_state.get("wiki_mode", "view")
+    dirty_key = f"wiki_dirty_{slug}"
 
     col_back, col_edit = st.columns([1, 1])
     with col_back:
-        if st.button("← Back to list"):
-            st.session_state.wiki_mode = "list"
-            st.rerun()
+        if mode == "edit" and st.session_state.get(dirty_key):
+            # Guarded back: require explicit Discard click while dirty.
+            st.warning("Unsaved changes")
+            if st.button("Discard and go back", key=f"discard_{slug}"):
+                st.session_state[dirty_key] = False
+                st.session_state.wiki_mode = "list"
+                st.rerun()
+        else:
+            if st.button("← Back to list"):
+                st.session_state.wiki_mode = "list"
+                st.rerun()
     with col_edit:
-        if st.session_state.get("wiki_mode") == "view" and st.button("✏️ Edit", type="primary"):
+        if mode == "view" and st.button("✏️ Edit", type="primary"):
             st.session_state.wiki_mode = "edit"
             st.rerun()
 
-    if st.session_state.get("wiki_mode") == "view":
+    if mode == "view":
         st.title(title)
+        _metadata_expander(slug, page)
         _render_blocks(markdown, key_prefix=f"view_{slug}")
+        _citations_footer(page)
     else:
         _edit_form(slug, title, markdown)
 
 
 def _edit_form(slug: str, title: str, markdown: str) -> None:
-    st.subheader(f"Editing `{slug}`")
+    dirty_key = f"wiki_dirty_{slug}"
+    dirty = st.session_state.get(dirty_key, False)
+    marker = "● " if dirty else ""
+    st.subheader(f"{marker}Editing `{slug}`")
+
     new_title = st.text_input("Title", value=title)
     source_col, preview_col = st.columns(2)
     with source_col:
@@ -106,12 +210,16 @@ def _edit_form(slug: str, title: str, markdown: str) -> None:
         st.caption("Preview")
         _render_blocks(new_markdown, key_prefix=f"preview_{slug}")
 
+    # Re-evaluate dirty state every rerun so the marker is always accurate.
+    st.session_state[dirty_key] = new_markdown != markdown or new_title != title
+
     if st.button("Save", type="primary"):
         try:
             upsert_wiki_page(slug, new_title, new_markdown)
         except httpx.HTTPError as exc:
             st.error(f"Save failed: {exc}")
             return
+        st.session_state[dirty_key] = False
         st.success("Saved.")
         st.session_state.wiki_mode = "view"
         st.rerun()

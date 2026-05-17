@@ -27,11 +27,22 @@ with text_tab:
                     st.caption(excerpt)
 
 with compound_tab:
-    smiles = st.text_input("Compound SMILES", placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O", key="cmp_q")
+    smiles = st.text_input(
+        "Compound SMILES", placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O", key="cmp_q"
+    )
     limit = st.slider("Limit", 5, 50, 20, key="cmp_limit")
+    min_score = st.slider(
+        "Min Tanimoto",
+        0.0,
+        1.0,
+        0.4,
+        0.05,
+        key="cmp_min_score",
+        help="Only return results with Tanimoto ≥ this value.",
+    )
     if st.button("Search", key="cmp_btn"):
         try:
-            data = search_compound(smiles, limit=limit)
+            data = search_compound(smiles, limit=limit, min_score=min_score)
         except httpx.HTTPError as exc:
             st.error(f"Search failed: {exc}")
         else:
@@ -47,9 +58,18 @@ with reaction_tab:
         key="rxn_q",
     )
     limit = st.slider("Limit", 5, 50, 20, key="rxn_limit")
+    min_score = st.slider(
+        "Min similarity",
+        0.0,
+        1.0,
+        0.4,
+        0.05,
+        key="rxn_min_score",
+        help="Only return results with DRFP similarity ≥ this value.",
+    )
     if st.button("Search", key="rxn_btn"):
         try:
-            data = search_reaction(rxn_smiles, limit=limit)
+            data = search_reaction(rxn_smiles, limit=limit, min_score=min_score)
         except httpx.HTTPError as exc:
             st.error(f"Search failed: {exc}")
         else:

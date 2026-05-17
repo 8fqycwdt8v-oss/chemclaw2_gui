@@ -31,13 +31,38 @@ class WikiUpsert(BaseModel):
     # citations intentionally not exposed; see module docstring.
 
 
+class WikiPatch(BaseModel):
+    needs_review: bool | None = None
+    archived: bool | None = None
+    maturity: str | None = None
+    project: str | None = None
+
+
 @router.get("/wiki")
 async def list_pages(
     cursor: str | None = Query(default=None),
+    project: str | None = Query(default=None),
+    include_archived: bool = Query(default=False),
+    projects: bool = Query(default=False),
     user: dict[str, str] = Depends(require_user),
-) -> dict[str, Any]:
+) -> Any:
+    # chemclaw2's response shape varies by mode:
+    #   projects=true  → {"projects": [...]}
+    #   q=...          → plain list (not exposed here)
+    #   default        → {"pages": [...], "nextCursor": ...}
+    # Pass params through unchanged; don't try to normalise.
+    params: dict[str, Any] = {}
+    if projects:
+        params["projects"] = "true"
+    else:
+        if cursor:
+            params["cursor"] = cursor
+        if project:
+            params["project"] = project
+        if include_archived:
+            params["include_archived"] = "true"
     async with client(user["sub"], user["token"]) as c:
-        r = await c.get("/api/wiki", params={"cursor": cursor} if cursor else None)
+        r = await c.get("/api/wiki", params=params or None)
         r.raise_for_status()
         return r.json()
 
@@ -59,5 +84,20 @@ async def upsert_page(
     """Create-or-update. chemclaw2's POST /api/wiki is an upsert by slug."""
     async with client(user["sub"], user["token"]) as c:
         r = await c.post("/api/wiki", json=body.model_dump())
+        r.raise_for_status()
+        return r.json()
+
+
+@router.patch("/wiki/{slug}")
+async def patch_page_metadata(
+    slug: str,
+    body: WikiPatch,
+    user: dict[str, str] = Depends(require_user),
+) -> dict[str, Any]:
+    """Metadata-only update. exclude_none so chemclaw2's no-op detection works."""
+    async with client(user["sub"], user["token"]) as c:
+        r = await c.patch(f"/api/wiki/{slug}", json=body.model_dump(exclude_none=True))
+        if r.status_code == 404:
+            raise HTTPException(404, "Not found")
         r.raise_for_status()
         return r.json()

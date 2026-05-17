@@ -14,6 +14,11 @@ class ChatRequest(BaseModel):
     prompt: str
     # chemclaw2 backend (api/routes/chat.py) uses snake_case `session_id`.
     session_id: str | None = None
+    # plan_mode flips claude-agent-sdk's permission_mode="plan" upstream.
+    plan_mode: bool | None = None
+    # override_justification (20-2000 chars) bypasses the scheduled-substance gate.
+    # Out-of-bounds values are silently coerced to None by chemclaw2's validator.
+    override_justification: str | None = None
 
 
 @router.post("/chat")

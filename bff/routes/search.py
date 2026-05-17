@@ -23,11 +23,13 @@ router = APIRouter()
 class CompoundSearch(BaseModel):
     smiles: str
     limit: int = 20
+    min_score: float = 0.4
 
 
 class ReactionSearch(BaseModel):
     reaction_smiles: str
     limit: int = 20
+    min_score: float = 0.4
 
 
 def _morgan_bits(smiles: str) -> str:
@@ -69,7 +71,11 @@ async def search_compound(
     async with client(user["sub"], user["token"]) as c:
         r = await c.post(
             "/api/search",
-            json={"fingerprint_bits": bits, "limit": body.limit},
+            json={
+                "fingerprint_bits": bits,
+                "limit": body.limit,
+                "min_score": body.min_score,
+            },
         )
         r.raise_for_status()
         return r.json()
@@ -83,7 +89,11 @@ async def search_reaction(
     async with client(user["sub"], user["token"]) as c:
         r = await c.post(
             "/api/search",
-            json={"rxn_fingerprint_bits": bits, "limit": body.limit},
+            json={
+                "rxn_fingerprint_bits": bits,
+                "limit": body.limit,
+                "min_score": body.min_score,
+            },
         )
         r.raise_for_status()
         return r.json()

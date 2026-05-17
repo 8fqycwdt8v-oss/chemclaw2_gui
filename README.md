@@ -69,15 +69,20 @@ Open Streamlit, sign in via Entra, land on the chat page.
 
 For Auth0 instead, uncomment the `[auth.auth0]` block in `secrets.toml.example` and adjust `app/main.py:LOGIN_PROVIDER`.
 
-## Backend prerequisites (must land in chemclaw2 before GUI is fully functional)
+## Auth bridge to chemclaw2
 
-Tracked as BACKLOG items in chemclaw2. The GUI degrades gracefully where possible.
+chemclaw2 (post-Python-migration, `api/auth.py`) uses Clerk JWT verification. This GUI authenticates the user via Microsoft Entra (or Auth0) through `st.login()`. The two IdPs don't trust each other's tokens. The BFF (`bff/chemclaw_client.py`) bridges them:
+
+- **Dev (default):** sends `Authorization: Bearer mock:<entra-sub>` to chemclaw2. Works when chemclaw2's `CLERK_SECRET_KEY` is unset or starts with `sk_test_REPLACE` (its built-in mock mode).
+- **Production:** set `CHEMCLAW2_SERVICE_SECRET` in `.env` AND implement the HMAC verifier in chemclaw2's `api/auth.py` (see "BACKLOG items in chemclaw2" below).
+
+## BACKLOG items in chemclaw2 (recommended, not strictly blocking)
 
 | # | Change in `chemclaw2` | Without it |
 |---|---|---|
-| 1 | Service-token auth path in `apps/web/middleware.ts` accepting `Authorization: Bearer svc.<sub>.<iat>.<sig>`. `sig = hmac_sha256(f"{sub}:{iat}", CHEMCLAW2_SERVICE_SECRET).hexdigest()`. **Must enforce a maxAge window on `iat`** (recommended: 300s) to bound replay attacks. | BFF can fall back to forwarding the user id_token (works only if chemclaw2 trusts the same IdP), otherwise auth fails on every call. |
-| 2 | `includePartialMessages: true` in `apps/web/lib/agent.ts:buildQueryOptions`. | Chat bubbles appear at end of turn, not token-by-token. GUI handles both cases. |
-| 3 | `X-Accel-Buffering: no` on `/api/chat` SSE (already in chemclaw2 BACKLOG). | SSE may buffer behind some proxies. |
+| 1 | Service-token auth path in `api/auth.py` accepting `Authorization: Bearer svc.<sub>.<iat>.<sig>` where `sig = hmac_sha256(f"{sub}:{iat}", CHEMCLAW2_SERVICE_SECRET).hexdigest()`. **Must enforce a maxAge window on `iat`** (recommended: 300s) to bound replay. | Production deploy must rely on chemclaw2's dev mock-token mode (`mock:<userId>`), which is not a production auth path. |
+| 2 | chemclaw2's `claude-agent-sdk` query options pass `include_partial_messages=True` (the Python SDK equivalent of the old TS `includePartialMessages`). | Chat bubbles appear at end of turn, not token-by-token. GUI handles both cases. |
+| 3 | `X-Accel-Buffering: no` on `/api/chat` SSE — already present in chemclaw2 commit; verify. | SSE may buffer behind some proxies. |
 
 ## Wiki content model
 

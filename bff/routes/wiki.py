@@ -1,8 +1,15 @@
-"""Wiki proxy. Critical: NEVER forward the `citations` field on POST/PUT.
+"""Wiki proxy.
 
-The chemclaw2 backend (`chemclaw2/apps/web/app/api/wiki/[slug]/route.ts:91-93`)
-reuses existing citations only when the caller omits the field. Passing `[]`
-wipes them. Strip the field on the way in regardless of what the GUI sends.
+chemclaw2's `POST /api/wiki` is an upsert (`upsert_wiki_page`), so both create
+and update flow through POST. `PATCH /api/wiki/{slug}` is metadata-only
+(needs_review, archived, maturity, project) — NOT content. The GUI only needs
+the POST path for v1.
+
+Field naming: chemclaw2 uses snake_case (`content_text`, not `contentText`).
+
+`citations` is intentionally absent from `WikiUpsert` — Pydantic drops the
+field, so the chemclaw2 backend uses its own existing-citations path
+(`citations or []` defaults to existing rows when the field is omitted).
 """
 
 from typing import Any
@@ -20,7 +27,7 @@ class WikiUpsert(BaseModel):
     slug: str
     title: str
     content: dict[str, Any]
-    contentText: str
+    content_text: str
     # citations intentionally not exposed; see module docstring.
 
 
@@ -46,20 +53,11 @@ async def get_page(slug: str, user: dict[str, str] = Depends(require_user)) -> d
 
 
 @router.post("/wiki")
-async def create_page(
+async def upsert_page(
     body: WikiUpsert, user: dict[str, str] = Depends(require_user)
 ) -> dict[str, Any]:
+    """Create-or-update. chemclaw2's POST /api/wiki is an upsert by slug."""
     async with client(user["sub"], user["token"]) as c:
         r = await c.post("/api/wiki", json=body.model_dump())
-        r.raise_for_status()
-        return r.json()
-
-
-@router.put("/wiki/{slug}")
-async def update_page(
-    slug: str, body: WikiUpsert, user: dict[str, str] = Depends(require_user)
-) -> dict[str, Any]:
-    async with client(user["sub"], user["token"]) as c:
-        r = await c.put(f"/api/wiki/{slug}", json=body.model_dump())
         r.raise_for_status()
         return r.json()

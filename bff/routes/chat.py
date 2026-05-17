@@ -12,7 +12,8 @@ router = APIRouter()
 
 class ChatRequest(BaseModel):
     prompt: str
-    sessionId: str | None = None
+    # chemclaw2 backend (api/routes/chat.py) uses snake_case `session_id`.
+    session_id: str | None = None
 
 
 @router.post("/chat")

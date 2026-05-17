@@ -6,7 +6,7 @@ services:
     env_file: .env
     environment:
       # Override for compose: BFF reaches chemclaw2 on the host network
-      CHEMCLAW2_API_URL: ${CHEMCLAW2_API_URL:-http://host.docker.internal:3000}
+      CHEMCLAW2_API_URL: ${CHEMCLAW2_API_URL:-http://host.docker.internal:8080}
     ports:
       - "8000:8000"
     extra_hosts:

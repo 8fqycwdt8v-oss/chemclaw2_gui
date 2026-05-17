@@ -70,6 +70,7 @@ def _consume(prompt: str, session_id: str | None) -> str | None:
             placeholder.empty()
             _render_assistant_blocks(event.get("message", {}))
         elif kind == "result":
+            # chemclaw2 backend emits `session_id` (snake_case).
             final_session_id = event.get("session_id") or final_session_id
         elif kind == "error":
             st.error(f"Backend error (id: {event.get('errorId', '?')})")

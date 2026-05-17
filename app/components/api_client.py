@@ -44,21 +44,15 @@ def get_wiki_page(slug: str) -> dict[str, Any]:
 
 
 def upsert_wiki_page(slug: str, title: str, markdown: str) -> dict[str, Any]:
-    """Create or update. Always omits citations to preserve existing ones.
-
-    Try PUT first (idempotent update); fall back to POST on 404 (slug doesn't
-    exist yet). Avoids the TOCTOU race and extra round-trip of a pre-check.
-    """
+    """Create or update. POST is an upsert; PATCH is metadata-only on chemclaw2."""
     body = {
         "slug": slug,
         "title": title,
         "content": {"version": "md1", "markdown": markdown},
-        "contentText": markdown,
+        "content_text": markdown,
     }
     with _client() as c:
-        r = c.put(f"/wiki/{slug}", json=body)
-        if r.status_code == 404:
-            r = c.post("/wiki", json=body)
+        r = c.post("/wiki", json=body)
         r.raise_for_status()
         return r.json()
 
@@ -88,7 +82,7 @@ def stream_chat(prompt: str, session_id: str | None = None) -> Iterator[bytes]:
     """Open an SSE stream from the BFF /chat endpoint. Yields raw bytes."""
     body: dict[str, Any] = {"prompt": prompt}
     if session_id:
-        body["sessionId"] = session_id
+        body["session_id"] = session_id
     with httpx.stream(
         "POST",
         f"{BFF_URL}/chat",

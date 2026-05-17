@@ -30,6 +30,29 @@ Streamlit GUI + FastAPI BFF for chemclaw2.
 - No database client. State is held in Streamlit session_state and chemclaw2's Postgres.
 - No bespoke chat framework. `st.chat_message` + `st.fragment` + a hand-rolled SSE iterator is the whole thing.
 
+## Open architecture question
+
+chemclaw2 is now itself a FastAPI Python backend (post-`2b3ab16`). The BFF's
+original "seed of a future Python backend" justification is moot. The three
+remaining BFF roles are (1) Entra↔Clerk identity translation, (2) RDKit/DRFP
+fingerprint compute, (3) defensive citations field-stripping. (2) and (3)
+belong in the Streamlit process. (1) only exists because of the IdP mismatch.
+If GUI auth switches to Clerk (or chemclaw2 adopts a shared OIDC), the BFF
+can be deleted in favor of direct Streamlit → chemclaw2 httpx calls. Tracked
+as a follow-up decision; do not delete until the auth model is settled.
+
+## Backend contract pinning
+
+chemclaw2's HTTP contract is consumed at:
+- `bff/routes/chat.py` (POST /api/chat — body uses `session_id`, snake_case)
+- `bff/routes/wiki.py` (POST /api/wiki upsert — body uses `content_text`)
+- `bff/routes/search.py` (GET/POST /api/search)
+- `bff/main.py:health` (proxies GET /api/health)
+- `bff/chemclaw_client.py` (auth header construction)
+
+When chemclaw2's API changes, those five files are the surface that needs to
+move. Don't add backwards-compatibility shims here — just update.
+
 ## Backend prerequisites (chemclaw2 BACKLOG items, blocking)
 
 1. Service-token auth path in `chemclaw2/apps/web/middleware.ts` accepting HMAC bearer.

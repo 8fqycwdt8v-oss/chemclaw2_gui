@@ -17,6 +17,12 @@ from bff.config import CHEMCLAW2_API_URL, CHEMCLAW2_SERVICE_SECRET
 
 
 def _auth_header(user_sub: str, user_token: str) -> dict[str, str]:
+    # Service-token format: `Bearer svc.<sub>.<iat>.<sig>` where
+    # sig = hmac_sha256(f"{sub}:{iat}", CHEMCLAW2_SERVICE_SECRET).hexdigest()
+    # chemclaw2 BACKLOG item #1 MUST enforce a maxAge window on iat
+    # (recommended: 300 seconds) to bound replay attacks if a service token
+    # is intercepted in transit. Without that window, an intercepted token is
+    # valid forever.
     if CHEMCLAW2_SERVICE_SECRET:
         iat = int(time.time())
         msg = f"{user_sub}:{iat}".encode()

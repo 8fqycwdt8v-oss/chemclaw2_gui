@@ -11,7 +11,9 @@ if not st.user.is_logged_in:
     st.stop()
 
 with st.sidebar:
-    st.write(f"Signed in as **{st.user.email}**")
+    # Entra ID may surface email under `preferred_username`; Auth0 uses `email`.
+    label = st.user.get("email") or st.user.get("preferred_username") or "(no email claim)"
+    st.write(f"Signed in as **{label}**")
     st.button("Sign out", on_click=st.logout)
 
 pages = [

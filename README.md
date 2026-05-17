@@ -75,7 +75,7 @@ Tracked as BACKLOG items in chemclaw2. The GUI degrades gracefully where possibl
 
 | # | Change in `chemclaw2` | Without it |
 |---|---|---|
-| 1 | Service-token auth path in `apps/web/middleware.ts` accepting `Authorization: Bearer <HMAC>`. HMAC = `hmac_sha256(f"{user_id}:{iat}", CHEMCLAW2_SERVICE_SECRET)`. | BFF can fall back to forwarding the user id_token (works only if chemclaw2 trusts the same IdP), otherwise auth fails on every call. |
+| 1 | Service-token auth path in `apps/web/middleware.ts` accepting `Authorization: Bearer svc.<sub>.<iat>.<sig>`. `sig = hmac_sha256(f"{sub}:{iat}", CHEMCLAW2_SERVICE_SECRET).hexdigest()`. **Must enforce a maxAge window on `iat`** (recommended: 300s) to bound replay attacks. | BFF can fall back to forwarding the user id_token (works only if chemclaw2 trusts the same IdP), otherwise auth fails on every call. |
 | 2 | `includePartialMessages: true` in `apps/web/lib/agent.ts:buildQueryOptions`. | Chat bubbles appear at end of turn, not token-by-token. GUI handles both cases. |
 | 3 | `X-Accel-Buffering: no` on `/api/chat` SSE (already in chemclaw2 BACKLOG). | SSE may buffer behind some proxies. |
 

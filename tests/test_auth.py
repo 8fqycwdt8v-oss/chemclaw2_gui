@@ -45,8 +45,18 @@ def rsa_keypair() -> tuple[str, dict[str, Any]]:
 def stub_jwks(
     rsa_keypair: tuple[str, dict[str, Any]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Replace bff_auth._jwks with a stub that mimics lru_cache's interface.
+
+    Production code calls `_jwks.cache_clear()` on the kid-not-found rotation
+    path. The plain lambda lacks that attribute, so we attach a no-op.
+    """
     _, public_jwk = rsa_keypair
-    monkeypatch.setattr(bff_auth, "_jwks", lambda: {"keys": [public_jwk]})
+
+    def fake_jwks() -> dict[str, Any]:
+        return {"keys": [public_jwk]}
+
+    fake_jwks.cache_clear = lambda: None  # type: ignore[attr-defined]
+    monkeypatch.setattr(bff_auth, "_jwks", fake_jwks)
 
 
 def _mint(private_pem: str, *, sub: str = "user-1", aud: str = "api://test-audience") -> str:

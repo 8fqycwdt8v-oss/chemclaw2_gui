@@ -14,10 +14,14 @@ from app.config import BFF_URL, REQUEST_TIMEOUT_S
 
 
 def _headers() -> dict[str, str]:
-    # st.user.id_token is exposed only when secrets.toml sets expose_tokens = ["id"].
-    token = getattr(st.user, "id_token", None)
+    # The id_token is exposed via st.user.tokens when secrets.toml's [auth] block
+    # sets expose_tokens = "id" (or includes "id" in a list).
+    tokens = getattr(st.user, "tokens", None)
+    token = tokens["id"] if tokens and "id" in tokens else None
     if not token:
-        raise RuntimeError("No id_token on st.user; check expose_tokens in secrets.toml.")
+        raise RuntimeError(
+            "No id_token on st.user.tokens — check `expose_tokens` in [auth] of secrets.toml."
+        )
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -40,7 +44,11 @@ def get_wiki_page(slug: str) -> dict[str, Any]:
 
 
 def upsert_wiki_page(slug: str, title: str, markdown: str) -> dict[str, Any]:
-    """Create or update. Always omits citations to preserve existing ones."""
+    """Create or update. Always omits citations to preserve existing ones.
+
+    Try PUT first (idempotent update); fall back to POST on 404 (slug doesn't
+    exist yet). Avoids the TOCTOU race and extra round-trip of a pre-check.
+    """
     body = {
         "slug": slug,
         "title": title,
@@ -48,14 +56,11 @@ def upsert_wiki_page(slug: str, title: str, markdown: str) -> dict[str, Any]:
         "contentText": markdown,
     }
     with _client() as c:
-        r = c.put(f"/wiki/{slug}", json=body) if _exists(c, slug) else c.post("/wiki", json=body)
+        r = c.put(f"/wiki/{slug}", json=body)
+        if r.status_code == 404:
+            r = c.post("/wiki", json=body)
         r.raise_for_status()
         return r.json()
-
-
-def _exists(client: httpx.Client, slug: str) -> bool:
-    r = client.get(f"/wiki/{slug}")
-    return r.status_code == 200
 
 
 def search_text(q: str, limit: int = 20) -> dict[str, Any]:

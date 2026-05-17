@@ -13,6 +13,7 @@ from app.components.api_client import (
     patch_wiki_page,
     upsert_wiki_page,
 )
+from app.components.text_utils import relative_time
 from app.components.wiki_render import (
     MarkdownBlock,
     MoleculeBlock,
@@ -184,11 +185,30 @@ def _view_or_edit(slug: str) -> None:
 
     if mode == "view":
         st.title(title)
+        _freshness_header(page)
         _metadata_expander(slug, page)
         _render_blocks(markdown, key_prefix=f"view_{slug}")
         _citations_footer(page)
     else:
         _edit_form(slug, title, markdown)
+
+
+def _freshness_header(page: dict) -> None:
+    """One-line caption: updated time, by whom, version, maturity badge."""
+    updated = relative_time(page.get("updated_at"))
+    updated_by = page.get("updated_by") or "system"
+    version = page.get("version") or 1
+    maturity = page.get("maturity") or "exploratory"
+    badges = []
+    if page.get("archived"):
+        badges.append("📦 archived")
+    if page.get("needs_review"):
+        badges.append("⚠️ needs review")
+    badge_str = " · ".join(badges)
+    parts = [f"Updated **{updated}** by `{updated_by}`", f"v{version}", f"maturity: **{maturity}**"]
+    if badge_str:
+        parts.append(badge_str)
+    st.caption(" · ".join(parts))
 
 
 def _edit_form(slug: str, title: str, markdown: str) -> None:

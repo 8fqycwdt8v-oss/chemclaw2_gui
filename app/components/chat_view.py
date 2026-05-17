@@ -21,6 +21,7 @@ from typing import Any
 import streamlit as st
 
 from app.components.api_client import stream_chat
+from app.components.text_utils import extract_wiki_refs
 
 
 @dataclass
@@ -100,6 +101,15 @@ def _consume(
     each `tool_use` event renders an info pill inline; errors and blocks are
     rendered immediately. Returns the same `ChatTurnResult` `dispatch_events`
     would produce — verified by tests.
+
+    Cancellation: between each SSE event we check `st.session_state.chat_cancel`.
+    Streamlit's execution model means button widgets DO NOT fire callbacks
+    mid-loop (the script doesn't yield to the event loop until it returns),
+    so a Cancel button click is only consumed on the *next* fragment rerun.
+    For a hard mid-stream interrupt, users rely on Streamlit's ⏸ Stop in
+    the page menu — the `with httpx.stream(...)` context manager in
+    `stream_chat` ensures the HTTP connection closes cleanly when the
+    generator is garbage-collected on script termination.
     """
     placeholder = st.empty()
     text_buffer: list[str] = []
@@ -111,6 +121,10 @@ def _consume(
         override_justification=override_justification,
     )
     for event in parse_sse(stream):
+        if st.session_state.get("chat_cancel"):
+            text_buffer.append("\n\n_(cancelled)_")
+            placeholder.markdown("".join(text_buffer))
+            break
         if event == "[DONE]":
             result.done = True
             break
@@ -137,11 +151,45 @@ def _consume(
     return result
 
 
+def _reset_conversation() -> None:
+    """Clear chat history + session id so the next prompt starts fresh."""
+    st.session_state.chat_history = []
+    st.session_state.chat_session_id = str(uuid.uuid4())
+    st.session_state.pending_blocked = None
+    st.session_state.chat_cancel = False
+
+
+def _request_cancel() -> None:
+    st.session_state.chat_cancel = True
+
+
 def _render_history() -> None:
     """Replay the conversation transcript stored in session_state."""
-    for role, text in st.session_state.chat_history:
+    for i, (role, text) in enumerate(st.session_state.chat_history):
         with st.chat_message(role):
             st.markdown(text)
+            if role == "assistant":
+                _render_wiki_refs(text, key_prefix=f"hist_{i}")
+
+
+def _render_wiki_refs(text: str, *, key_prefix: str) -> None:
+    """If the assistant's reply mentions wiki pages via `[wiki:slug]`, surface
+    them as clickable buttons that navigate to the wiki page.
+
+    Streamlit's `st.markdown` already renders `[label](url)` syntax, but inline
+    links can't cleanly trigger cross-page navigation in a multipage app. The
+    expander + button pattern works reliably: the button click triggers a
+    rerun, and `st.switch_page` lands the user on the right page.
+    """
+    refs = extract_wiki_refs(text)
+    if not refs:
+        return
+    with st.expander(f"📚 Referenced wiki pages ({len(refs)})"):
+        for slug in refs:
+            if st.button(f"Open `{slug}`", key=f"{key_prefix}_ref_{slug}"):
+                st.session_state.wiki_slug = slug
+                st.session_state.wiki_mode = "view"
+                st.switch_page("pages/wiki.py")
 
 
 def _handle_blocked(blocked: dict[str, Any], original_prompt: str) -> None:
@@ -204,6 +252,11 @@ def _commit_turn(result: ChatTurnResult) -> None:
         st.session_state.chat_session_id = result.session_id
     if result.assistant_text:
         st.session_state.chat_history.append(("assistant", result.assistant_text))
+        # Render wiki-ref expander for the just-finished turn. On the next rerun
+        # _render_history will replay it; this call surfaces it immediately
+        # without waiting for the rerun.
+        turn_idx = len(st.session_state.chat_history) - 1
+        _render_wiki_refs(result.assistant_text, key_prefix=f"live_{turn_idx}")
 
 
 @st.fragment
@@ -219,8 +272,31 @@ def chat_fragment(plan_mode: bool = False) -> None:
         st.session_state.chat_session_id = str(uuid.uuid4())
     if "pending_blocked" not in st.session_state:
         st.session_state.pending_blocked = None
+    if "chat_cancel" not in st.session_state:
+        st.session_state.chat_cancel = False
     # Stash plan_mode in session_state so the override-resubmit flow can read it.
     st.session_state.plan_mode = plan_mode
+
+    # Toolbar: cancel + new-conversation. Buttons disabled when there's no
+    # active conversation to act on.
+    col_cancel, col_reset, _ = st.columns([1, 1, 6])
+    with col_cancel:
+        st.button(
+            "🛑 Cancel",
+            on_click=_request_cancel,
+            disabled=not st.session_state.chat_history,
+            help=(
+                "Stops streaming between SSE events. For an immediate hard "
+                "interrupt during a long tool call, use Streamlit's ⏸ Stop "
+                "in the page menu."
+            ),
+        )
+    with col_reset:
+        st.button(
+            "🔄 New conversation",
+            on_click=_reset_conversation,
+            disabled=not st.session_state.chat_history,
+        )
 
     _render_history()
 
@@ -232,6 +308,9 @@ def chat_fragment(plan_mode: bool = False) -> None:
     prompt = st.chat_input("Ask ChemClaw…")
     if not prompt:
         return
+
+    # Clear any prior cancel before starting a new turn.
+    st.session_state.chat_cancel = False
 
     st.session_state.chat_history.append(("user", prompt))
     with st.chat_message("user"):

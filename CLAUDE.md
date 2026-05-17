@@ -51,5 +51,12 @@ When chemclaw2's API changes, these three files are the surface that moves. Don'
 1. Service-token auth path in `chemclaw2/api/auth.py` accepting `Bearer svc.<sub>.<iat>.<sig>` with a maxAge window on `iat`.
 2. `include_partial_messages=True` in `chemclaw2/api/agent/runner.py:ClaudeAgentOptions` (for token-by-token streaming UX).
 3. `X-Accel-Buffering: no` on `/api/chat` SSE response.
+4. **Teach the agent to emit `[wiki:slug]` references.** The GUI parses these
+   and renders a "📚 Referenced wiki pages" expander under each assistant turn
+   with clickable navigation. Append to `BASE_SYSTEM_PROMPT` in
+   `chemclaw2/api/agent/runner.py`: *"When you cite an org wiki page, also
+   embed `[wiki:slug]` (lowercase-with-hyphens) so the UI can offer a direct
+   navigation link."* Until this lands, the expander only renders when the
+   agent happens to use that syntax on its own.
 
 See `README.md` for details.

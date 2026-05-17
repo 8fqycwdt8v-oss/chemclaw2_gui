@@ -115,3 +115,29 @@ def test_dispatch_handles_no_done_sentinel() -> None:
     r = dispatch_events(events)
     assert r.assistant_text == "partial"
     assert r.done is False
+
+
+def test_dispatch_captures_session_id_from_session_start() -> None:
+    # chemclaw2 emits `session_start` early in the stream so the client knows
+    # the resumed session_id before end-of-turn. Both this and `result` should
+    # populate session_id; result wins if different (shouldn't be, but tested).
+    events = [
+        {"type": "session_start", "session_id": "s-early"},
+        {"type": "text", "text": "hi"},
+        {"type": "result", "session_id": "s-final"},
+        "[DONE]",
+    ]
+    r = dispatch_events(events)
+    assert r.session_id == "s-final"
+
+
+def test_dispatch_session_start_alone_still_captured() -> None:
+    # If the stream is cut between session_start and result, we still know
+    # the session_id from the early envelope.
+    events = [
+        {"type": "session_start", "session_id": "s-only"},
+        {"type": "text", "text": "interrupted"},
+    ]
+    r = dispatch_events(events)
+    assert r.session_id == "s-only"
+    assert r.done is False

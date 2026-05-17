@@ -77,7 +77,10 @@ def dispatch_events(events: Iterable[dict[str, Any] | str]) -> ChatTurnResult:
             text_parts.append(event.get("text", ""))
         elif kind == "tool_use":
             result.tool_uses.append(event.get("name", ""))
-        elif kind == "result":
+        elif kind in ("result", "session_start"):
+            # chemclaw2 emits `session_start` early in the stream as an
+            # optimization so the client can persist the resumed session_id
+            # before end-of-turn, AND `result` at end-of-turn. Both carry it.
             result.session_id = event.get("session_id") or result.session_id
         elif kind == "error":
             if event.get("blocked") and event.get("override_available"):
@@ -138,7 +141,7 @@ def _consume(
             name = event.get("name", "tool")
             result.tool_uses.append(name)
             st.info(f"→ {name}(…)")
-        elif kind == "result":
+        elif kind in ("result", "session_start"):
             result.session_id = event.get("session_id") or result.session_id
         elif kind == "error":
             if event.get("blocked") and event.get("override_available"):
@@ -192,20 +195,13 @@ def _render_wiki_refs(text: str, *, key_prefix: str) -> None:
                 st.switch_page("pages/wiki.py")
 
 
-def _handle_blocked(blocked: dict[str, Any], original_prompt: str) -> None:
-    """Render the override-justification flow inside the current chat_message.
-
-    User chooses Submit (re-runs prompt with override) or Cancel.
-    Stores intent in session_state so the next fragment rerun resumes correctly.
-    """
-    st.session_state.pending_blocked = {
-        "prompt": original_prompt,
-        "reason": blocked.get("message", ""),
-    }
-
-
 def _justification_form() -> None:
-    """The override-justification form, shown when a prompt was blocked."""
+    """The override-justification form, shown when a prompt was blocked.
+
+    The original user message has already been appended to chat_history
+    (in `chat_fragment` before _consume ran) — we do NOT re-append it on
+    submit, only re-issue the prompt to the agent with the justification.
+    """
     pending = st.session_state.pending_blocked
     with st.chat_message("assistant"):
         st.warning(pending["reason"])
@@ -230,10 +226,6 @@ def _justification_form() -> None:
             if len(justification.strip()) < 20:
                 st.error("Justification must be at least 20 characters.")
                 return
-            # Re-issue the prompt with the override.
-            st.session_state.chat_history.append(("user", pending["prompt"]))
-            with st.chat_message("user"):
-                st.markdown(pending["prompt"])
             with st.chat_message("assistant"):
                 result = _consume(
                     pending["prompt"],
@@ -317,8 +309,12 @@ def chat_fragment(plan_mode: bool = False) -> None:
         st.markdown(prompt)
     with st.chat_message("assistant"):
         result = _consume(prompt, st.session_state.chat_session_id, plan_mode=plan_mode)
-        if result.blocked:
-            _handle_blocked(result.blocked, prompt)
-            # Trigger a rerun so the form renders cleanly under the warning.
-            st.rerun()
+    if result.blocked:
+        # Stash and rerun so the justification form renders cleanly under the warning.
+        st.session_state.pending_blocked = {
+            "prompt": prompt,
+            "reason": result.blocked.get("message", ""),
+        }
+        st.rerun()
+    else:
         _commit_turn(result)

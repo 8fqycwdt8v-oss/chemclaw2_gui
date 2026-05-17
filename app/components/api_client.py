@@ -15,6 +15,7 @@ verification and proxied HTTP. Removed in favour of direct calls.
 
 import hashlib
 import hmac
+import re
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -24,12 +25,24 @@ import streamlit as st
 
 from app.config import CHEMCLAW2_API_URL, CHEMCLAW2_SERVICE_SECRET, REQUEST_TIMEOUT_S
 
+# Allowlist for IdP subject claims. Entra (base64url-ish), Google (numeric),
+# Auth0 (`provider|id`), and Okta (URL-safe ID) all fit. Excludes `.` and `:`
+# which would break our token wire format `svc.<sub>.<iat>.<sig>` and our
+# HMAC message `<sub>:<iat>`. Max length per OIDC spec is 255.
+_SUB_RE = re.compile(r"^[A-Za-z0-9_\-|]{1,255}$")
+
 
 def _user_sub() -> str:
     sub = getattr(st.user, "sub", None)
     if not sub:
         raise RuntimeError("st.user has no `sub` claim — is the user signed in?")
-    return str(sub)
+    sub_str = str(sub)
+    if not _SUB_RE.match(sub_str):
+        # Refuse to construct a token whose format depends on a sub we can't
+        # safely embed. If a new IdP introduces other separators we'd see this
+        # fail closed — preferable to silently signing an ambiguous message.
+        raise RuntimeError("IdP sub contains characters incompatible with token format")
+    return sub_str
 
 
 def _auth_header() -> dict[str, str]:
@@ -77,21 +90,41 @@ def list_wiki_pages(
         return r.json()
 
 
-@st.cache_data(ttl=60, show_spinner=False)
 def list_projects() -> list[str]:
-    """Fetch the distinct project names known to chemclaw2.
+    """Wrapper that supplies the per-user cache key.
 
-    Cached for 60s because (a) projects rarely churn and (b) this fires on
-    every rerun of the wiki list page. Globally cached (no per-user key)
-    because the projects list is the same for everyone. To invalidate after
-    creating a page with a new project, call `list_projects.clear()`.
+    Today chemclaw2 returns the same projects list for everyone, so a global
+    cache would be technically safe — but the cache *must* key on user identity
+    so that if chemclaw2 ever scopes projects per tenant or role, the GUI can't
+    silently leak across users.
     """
+    return _list_projects_cached(user_sub=_user_sub())
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _list_projects_cached(user_sub: str) -> list[str]:
+    """Per-user cache. `st.cache_data` includes args in the cache key UNLESS
+    the name starts with `_` (which is Streamlit's "don't hash this" marker).
+    Hence `user_sub` (no leading underscore) — each user gets their own slot.
+
+    60s TTL covers fragment-rerun storms; busted on writes via
+    `list_projects.clear()`.
+    """
+    del user_sub  # only used as the cache key; the request itself reads
+    # `st.user` via `_auth_header()` inside `_client()`.
     with _client() as c:
         r = c.get("/api/wiki", params={"projects": "true"})
         r.raise_for_status()
         data = r.json()
     projects = data.get("projects") or []
     return [p for p in projects if isinstance(p, str)]
+
+
+# Re-export `.clear()` so call sites that bust the cache after a write
+# (upsert_wiki_page / patch_wiki_page) don't need to know about the
+# inner cached function. `.clear()` with no args wipes ALL keys; that's
+# fine on a write (rare event), no need for per-user precision.
+list_projects.clear = _list_projects_cached.clear  # type: ignore[attr-defined]
 
 
 def get_wiki_page(slug: str) -> dict[str, Any]:

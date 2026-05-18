@@ -23,7 +23,7 @@ from app.components.wiki_render import (
     parse,
 )
 
-SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$")
 MATURITY_OPTIONS = ["exploratory", "validated", "production"]
 
 

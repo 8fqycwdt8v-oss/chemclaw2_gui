@@ -51,10 +51,10 @@ def test_extract_markdown_prefers_md1_content() -> None:
 
 
 def test_extract_markdown_falls_back_to_content_text() -> None:
-    # Legacy Tiptap-authored page: content is Tiptap JSON, no md1 marker.
+    # Non-md1 page (e.g. agent-authored): backend returns content_text (snake_case).
     page = {
         "content": {"type": "doc", "content": []},
-        "contentText": "legacy text",
+        "content_text": "legacy text",
     }
     assert extract_markdown(page) == "legacy text"
 

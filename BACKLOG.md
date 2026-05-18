@@ -2,19 +2,12 @@
 
 Append-only log of deferred work. One bullet per item, prefixed by area. Resolve by deleting the line in the same PR that lands the work (or moves it elsewhere).
 
-## chemclaw2 backend routes the GUI wants (blocking specialised views)
-
-- [views/campaigns] Need `GET /api/campaigns?status=` and `GET /api/campaigns/{id}` exposing `SynthesisCampaign` + nested `CampaignStep` rows. Today the data is reachable only via agent tools (`start_synthesis_campaign`, `confirm_synthesis_plan`). Without these, the `campaign_progress` view in `app/views/` stays in stub mode.
-- [views/todos] Need `GET /api/todos/{session_id}` returning `AgentTodo` rows for the session. Subagents (deep-research) populate this table but the GUI can't read it. Stubs the `agent_todos` view.
-- [views/contradictions] Need `GET /api/wiki/{slug}` extended to return `contradictions: WikiContradiction[]` (today returns only `citations[]`). OR a new `GET /api/wiki/{slug}/contradictions` route. Stubs the `contradiction_triage` view.
-- [views/notifications] Need `GET /api/notifications` for proactive alerts (story 3.5, 3.10). Defer; not currently stubbed.
-
 ## chemclaw2 backend changes for GUI feature completeness
 
-- [auth] Service-token verifier in `chemclaw2/api/auth.py` accepting `Bearer svc.<sub>.<iat>.<sig>` with a maxAge window on `iat` (recommended 300s). Until shipped, production must use chemclaw2's dev `mock:<sub>` path which is not a real production auth model.
 - [chat] Set `include_partial_messages=True` in `chemclaw2/api/agent/runner.py:ClaudeAgentOptions` so the GUI can render token-by-token streaming. Today bubbles arrive whole.
 - [chat] Add a system-prompt instruction to chemclaw2's `BASE_SYSTEM_PROMPT` teaching the agent to emit `[wiki:slug]` when citing org wiki pages. The GUI parses these into clickable deep-link buttons (`extract_wiki_refs` in `app/components/text_utils.py`). Until shipped, the "📚 Referenced wiki pages" expander only renders for prompts where the agent happens to use the syntax.
 - [chat] (Optional Phase 2) Add `{type: "view", view_id, payload}` SSE envelope so the agent can explicitly trigger a specialised view. Dispatch target is `app/views/__init__.py:VIEWS`. Until shipped, view activation is heuristic (context matchers) + user (quick-open) only.
+- [views/notifications] `GET /api/notifications` + `PATCH /api/notifications` are implemented in chemclaw2 but not yet wired in the GUI. Add `get_notifications()` to `api_client.py` and a `app/views/notifications.py` view.
 
 ## GUI follow-ups (no backend dependency)
 

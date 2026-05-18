@@ -239,6 +239,41 @@ def get_backend_health() -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
+def get_todos(session_id: str) -> dict[str, Any]:
+    """Fetch agent todos for a session. Returns {todos: [...]}."""
+    with _client() as c:
+        r = c.get(f"/api/todos/{session_id}")
+        r.raise_for_status()
+        return r.json()
+
+
+def list_campaigns(cursor: str | None = None) -> dict[str, Any]:
+    """List the current user's synthesis campaigns. Returns {campaigns: [...], nextCursor}."""
+    params: dict[str, Any] = {}
+    if cursor:
+        params["cursor"] = cursor
+    with _client() as c:
+        r = c.get("/api/campaigns", params=params or None)
+        r.raise_for_status()
+        return r.json()
+
+
+def get_campaign(campaign_id: str) -> dict[str, Any]:
+    """Fetch a single campaign with its steps."""
+    with _client() as c:
+        r = c.get(f"/api/campaigns/{campaign_id}")
+        r.raise_for_status()
+        return r.json()
+
+
+def get_wiki_contradictions(slug: str, resolved: bool = False) -> dict[str, Any]:
+    """Fetch contradictions for a wiki page. Returns {contradictions: [...]}."""
+    with _client() as c:
+        r = c.get(f"/api/wiki/{slug}/contradictions", params={"resolved": str(resolved).lower()})
+        r.raise_for_status()
+        return r.json()
+
+
 def stream_chat(
     prompt: str,
     session_id: str | None = None,

@@ -86,5 +86,5 @@ def extract_markdown(page: dict[str, object]) -> str:
         md = content.get("markdown")
         if isinstance(md, str):
             return md
-    text = page.get("contentText")
+    text = page.get("content_text")
     return text if isinstance(text, str) else ""

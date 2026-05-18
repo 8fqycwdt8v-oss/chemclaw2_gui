@@ -141,3 +141,52 @@ def test_dispatch_session_start_alone_still_captured() -> None:
     r = dispatch_events(events)
     assert r.session_id == "s-only"
     assert r.done is False
+
+
+def test_dispatch_view_intent_collected() -> None:
+    # chemclaw2 may emit `{type:"view", view_id, payload?}` to request the
+    # GUI open a specialised view. The dispatcher collects them; the chat
+    # fragment renders Open buttons after the turn.
+    events = [
+        {"type": "text", "text": "Started campaign CAMP-42."},
+        {"type": "view", "view_id": "campaign", "payload": {"id": "CAMP-42"}},
+        {"type": "result", "session_id": "s"},
+        "[DONE]",
+    ]
+    r = dispatch_events(events)
+    assert r.view_intents == [{"view_id": "campaign", "payload": {"id": "CAMP-42"}}]
+
+
+def test_dispatch_view_intent_without_payload_defaults_to_empty_dict() -> None:
+    events = [
+        {"type": "view", "view_id": "research"},
+        "[DONE]",
+    ]
+    r = dispatch_events(events)
+    assert r.view_intents == [{"view_id": "research", "payload": {}}]
+
+
+def test_dispatch_view_intent_skips_malformed() -> None:
+    # Missing or non-string view_id → silently ignored. The contract is the
+    # backend's job to keep; defensive on our side because corrupt envelopes
+    # shouldn't crash the chat fragment.
+    events = [
+        {"type": "view"},  # no view_id
+        {"type": "view", "view_id": 123},  # wrong type
+        {"type": "view", "view_id": ""},  # empty
+        {"type": "view", "view_id": "good", "payload": {"x": 1}},
+        "[DONE]",
+    ]
+    r = dispatch_events(events)
+    assert r.view_intents == [{"view_id": "good", "payload": {"x": 1}}]
+
+
+def test_dispatch_multiple_view_intents_preserved_in_order() -> None:
+    events = [
+        {"type": "view", "view_id": "campaign"},
+        {"type": "text", "text": "..."},
+        {"type": "view", "view_id": "todos"},
+        "[DONE]",
+    ]
+    r = dispatch_events(events)
+    assert [vi["view_id"] for vi in r.view_intents] == ["campaign", "todos"]

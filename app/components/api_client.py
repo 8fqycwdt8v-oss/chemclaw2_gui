@@ -274,6 +274,75 @@ def get_wiki_contradictions(slug: str, resolved: bool = False) -> dict[str, Any]
         return r.json()
 
 
+def get_wiki_revisions(slug: str, limit: int = 20) -> dict[str, Any]:
+    """List revision history for a wiki page. Returns {revisions: [...]} —
+    rows have {id, page_id, version, title, updated_by, updated_at}, no content
+    in the list response (kept small)."""
+    with _client() as c:
+        r = c.get(f"/api/wiki/{slug}/revisions", params={"limit": limit})
+        r.raise_for_status()
+        return r.json()
+
+
+def get_wiki_revision(slug: str, version: int) -> dict[str, Any]:
+    """Fetch a single revision including content. Returns full row."""
+    with _client() as c:
+        r = c.get(f"/api/wiki/{slug}/revisions/{version}")
+        r.raise_for_status()
+        return r.json()
+
+
+def get_notifications(unread_only: bool = True, limit: int = 50) -> dict[str, Any]:
+    """Fetch notifications. Returns {notifications: [...], unread_count: int}."""
+    with _client() as c:
+        r = c.get(
+            "/api/notifications",
+            params={"unread_only": str(unread_only).lower(), "limit": limit},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+def mark_notifications_read(
+    *, ids: list[str] | None = None, all_: bool = False
+) -> dict[str, Any]:
+    """PATCH /api/notifications. Provide either ids OR all_=True. Returns {marked_read: int}.
+
+    Busts the cached_unread_notifications cache so the next render sees the new count.
+    """
+    body: dict[str, Any] = {}
+    if ids:
+        body["ids"] = ids
+    if all_:
+        body["all"] = True
+    with _client() as c:
+        r = c.patch("/api/notifications", json=body)
+        r.raise_for_status()
+        result: dict[str, Any] = r.json()
+    cached_unread_notifications.clear()
+    return result
+
+
+def cached_unread_notifications() -> dict[str, Any]:
+    """Per-user cached fetch (unread only) used by the notifications view's
+    matches() — needs a cheap signal that doesn't hit the backend on every
+    rerun. See `app/views/notifications.py`. Busted by mark_notifications_read.
+    """
+    return _cached_unread_notifications_inner(user_sub=_user_sub())
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _cached_unread_notifications_inner(user_sub: str) -> dict[str, Any]:
+    del user_sub  # cache-key only; see list_projects for the pattern rationale.
+    try:
+        return get_notifications(unread_only=True, limit=50)
+    except Exception:  # noqa: BLE001 — degrade to "no notifications" on failure
+        return {"notifications": [], "unread_count": 0}
+
+
+cached_unread_notifications.clear = _cached_unread_notifications_inner.clear  # type: ignore[attr-defined]
+
+
 def stream_chat(
     prompt: str,
     session_id: str | None = None,

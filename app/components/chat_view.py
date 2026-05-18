@@ -34,6 +34,11 @@ class ChatTurnResult:
     blocked: dict[str, Any] | None = None  # full error envelope when blocked
     error: str | None = None  # non-blocking error message
     done: bool = False
+    # Agent-emitted view intents — chemclaw2 may emit
+    # {type:"view", view_id, payload?} when a tool's output deserves a
+    # specialised UI surface. Each entry: {"view_id": str, "payload": dict}.
+    # The renderer turns them into "Open in <View>" buttons under the turn.
+    view_intents: list[dict[str, Any]] = field(default_factory=list)
 
 
 def parse_sse(stream: Iterable[bytes]) -> Iterator[dict[str, Any] | str]:
@@ -82,6 +87,12 @@ def dispatch_events(events: Iterable[dict[str, Any] | str]) -> ChatTurnResult:
             # optimization so the client can persist the resumed session_id
             # before end-of-turn, AND `result` at end-of-turn. Both carry it.
             result.session_id = event.get("session_id") or result.session_id
+        elif kind == "view":
+            view_id = event.get("view_id")
+            if isinstance(view_id, str) and view_id:
+                result.view_intents.append(
+                    {"view_id": view_id, "payload": event.get("payload") or {}}
+                )
         elif kind == "error":
             if event.get("blocked") and event.get("override_available"):
                 result.blocked = event
@@ -143,6 +154,12 @@ def _consume(
             st.info(f"→ {name}(…)")
         elif kind in ("result", "session_start"):
             result.session_id = event.get("session_id") or result.session_id
+        elif kind == "view":
+            view_id = event.get("view_id")
+            if isinstance(view_id, str) and view_id:
+                result.view_intents.append(
+                    {"view_id": view_id, "payload": event.get("payload") or {}}
+                )
         elif kind == "error":
             if event.get("blocked") and event.get("override_available"):
                 result.blocked = event
@@ -259,6 +276,32 @@ def _commit_turn(result: ChatTurnResult) -> None:
         # without waiting for the rerun.
         turn_idx = len(st.session_state.chat_history) - 1
         _render_wiki_refs(result.assistant_text, key_prefix=f"live_{turn_idx}")
+    if result.view_intents:
+        prefix = f"live_{len(st.session_state.chat_history)}"
+        _render_view_intents(result.view_intents, key_prefix=prefix)
+
+
+def _render_view_intents(intents: list[dict[str, Any]], *, key_prefix: str) -> None:
+    """Render an Open-in-<View> button for each agent-emitted view intent.
+
+    Imports the registry lazily so chat_view stays decoupled from view-module
+    discovery (which itself imports api_client). Avoids any import cycle.
+    """
+    from app.views import VIEWS
+
+    for i, intent in enumerate(intents):
+        view_id = intent["view_id"]
+        view = VIEWS.get(view_id)
+        if view is None:
+            continue
+        if st.button(
+            f"{view.icon} Open in {view.label}",
+            key=f"{key_prefix}_view_{view_id}_{i}",
+        ):
+            st.session_state.dock_pinned = st.session_state.get("dock_pinned", set())
+            st.session_state.dock_pinned.add(view_id)
+            st.session_state.active_view_id = view_id
+            st.rerun()
 
 
 @st.fragment

@@ -2,16 +2,14 @@
 
 Append-only log of deferred work. One bullet per item, prefixed by area. Resolve by deleting the line in the same PR that lands the work (or moves it elsewhere).
 
-## chemclaw2 backend changes for GUI feature completeness
+## chemclaw2 backend changes (GUI is ready when these ship)
 
-- [chat] Set `include_partial_messages=True` in `chemclaw2/api/agent/runner.py:ClaudeAgentOptions` so the GUI can render token-by-token streaming. Today bubbles arrive whole.
-- [chat] Add a system-prompt instruction to chemclaw2's `BASE_SYSTEM_PROMPT` teaching the agent to emit `[wiki:slug]` when citing org wiki pages. The GUI parses these into clickable deep-link buttons (`extract_wiki_refs` in `app/components/text_utils.py`). Until shipped, the "📚 Referenced wiki pages" expander only renders for prompts where the agent happens to use the syntax.
-- [chat] (Optional Phase 2) Add `{type: "view", view_id, payload}` SSE envelope so the agent can explicitly trigger a specialised view. Dispatch target is `app/views/__init__.py:VIEWS`. Until shipped, view activation is heuristic (context matchers) + user (quick-open) only.
-- [views/notifications] `GET /api/notifications` + `PATCH /api/notifications` are implemented in chemclaw2 but not yet wired in the GUI. Add `get_notifications()` to `api_client.py` and a `app/views/notifications.py` view.
+- [chemclaw2/chat/partials] Set `include_partial_messages=True` in `chemclaw2/api/agent/runner.py:ClaudeAgentOptions` so the GUI can render token-by-token streaming. The GUI's `chat_view.dispatch_events` already handles whatever partial envelopes the SDK emits; today bubbles arrive whole because the option is off.
+- [chemclaw2/chat/wiki-refs] Append to `BASE_SYSTEM_PROMPT` in `chemclaw2/api/agent/runner.py`: *"When you cite an org wiki page, embed `[wiki:slug]` (lowercase-with-hyphens) so the UI can offer a direct navigation link."* The GUI's `extract_wiki_refs` (`app/components/text_utils.py`) parses these into a "📚 Referenced wiki pages" expander. Until shipped, only fires when the agent happens to use the syntax.
+- [chemclaw2/chat/view-intent] Emit `{type: "view", view_id, payload?}` SSE envelopes when a tool's result deserves a specialised UI surface. The GUI dispatch is already wired in `chat_view.dispatch_events` (handles the new envelope and renders an "Open in <View>" button below the assistant turn). Currently a no-op because chemclaw2 doesn't emit. Suggested trigger points: after `start_synthesis_campaign` → `{view_id:"campaign"}`; after `record_contradiction` → `{view_id:"contradictions"}`; when the deep-research subagent finishes → `{view_id:"research"}`.
 
 ## GUI follow-ups (no backend dependency)
 
-- [wiki] Revision history view — `version` column exists on `wiki_pages` but no history endpoint yet on chemclaw2.
 - [chat] Hard cancellation via Streamlit Stop button is documented but a custom in-context cancel button only works between SSE events (Streamlit limitation). Investigate `httpx.AsyncClient` + thread cancellation if users actually hit this.
 - [search] Render compound similarity results with inline RDKit SVG thumbnails instead of bare dataframe.
 - [search] Cross-project scope toggle on similarity search — blocked on chemclaw2 search accepting a `project` filter.

@@ -86,6 +86,7 @@ When chemclaw2's API changes, these three files are the surface that moves. Don'
 - **Sibling repos.** Backend lives at `/Users/robertmoeckel/Documents/VSCode/chemclaw2` (FastAPI Python). Local-dev DB + mock services at `/Users/robertmoeckel/Documents/VSCode/chemclaw2_mockdata`. Both must be running for end-to-end testing.
 - **chemclaw2 dev-mode auth.** When chemclaw2's `CLERK_SECRET_KEY` is unset or starts with `sk_test_REPLACE`, it accepts `Bearer mock:<userId>` — the GUI's default. Production must set both `CLERK_SECRET_KEY` on chemclaw2 *and* `CHEMCLAW2_SERVICE_SECRET` on this side, plus implement the HMAC verifier (chemclaw2 BACKLOG #1).
 - **Slug regex must match chemclaw2's.** chemclaw2's `_SLUG_RE` (in `api/routes/wiki.py`) is `^[a-z0-9][a-z0-9-]*[a-z0-9]$`. Our `_WIKI_REF_RE` (text_utils.py) and `SLUG_RE` (pages/wiki.py) must stay aligned or refs won't resolve.
+- **View `matches()` must be exception-safe.** Locked by `tests/test_views_registry.py::test_matches_is_a_pure_function_of_state_dict` which runs `matches({})` for every registered view. If your `matches()` reads from anything that can fail when uninitialised (e.g., `st.user.sub` before sign-in, a cached API call that authenticates), wrap it. See `app/views/notifications.py:_safe_unread_count` for the pattern.
 
 ## Backend prerequisites (chemclaw2 BACKLOG items, recommended)
 

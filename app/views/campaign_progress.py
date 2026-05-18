@@ -77,7 +77,10 @@ def render(state: dict[str, Any]) -> None:
         status = campaign.get("status", "?")
         emoji = _STATUS_EMOJI.get(status, "•")
         st.subheader(f"{emoji} {campaign.get('target_smiles') or selected_id}")
-        st.caption(f"Session: {campaign.get('session_id', '—')}  ·  Created: {campaign.get('created_at', '—')}")
+        st.caption(
+            f"Session: {campaign.get('session_id', '—')}  ·  "
+            f"Created: {campaign.get('created_at', '—')}"
+        )
         _step_table(data.get("steps") or [])
         return
 

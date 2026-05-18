@@ -55,7 +55,8 @@ def render(state: dict[str, Any]) -> None:
     for item in items:
         winner = item.get("proposed_winner", "inconclusive")
         winner_label = _WINNER_LABEL.get(winner, winner)
-        header = f"**{winner_label}** — _{item.get('citation_a', '?')}_ vs _{item.get('citation_b', '?')}_"
+        a, b = item.get("citation_a", "?"), item.get("citation_b", "?")
+        header = f"**{winner_label}** — _{a}_ vs _{b}_"
         with st.expander(header, expanded=not item.get("resolved_by")):
             if item.get("reason"):
                 st.write(item["reason"])

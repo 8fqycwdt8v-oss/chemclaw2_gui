@@ -47,4 +47,5 @@ def render(state: dict[str, Any]) -> None:
     for todo in todos:
         checked = todo.get("status") == "done"
         label = todo.get("text", "")
-        st.checkbox(label, value=checked, disabled=True, key=f"todo_{todo.get('id', todo.get('position', 0))}")
+        todo_key = todo.get("id", todo.get("position", 0))
+        st.checkbox(label, value=checked, disabled=True, key=f"todo_{todo_key}")

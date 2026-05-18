@@ -4,12 +4,15 @@ Single-container Streamlit GUI for chemclaw2. No backend, no BFF — Streamlit
 calls chemclaw2's FastAPI directly.
 
 ```
-app/main.py              entry: st.login gate, navigation, sidebar (health)
+app/main.py              entry: st.login gate, navigation, sidebar (health + dock)
 app/pages/               chat, wiki, search Streamlit pages
-app/components/          api_client (HTTP + auth), chat_view, wiki_render, chem, text_utils
+app/components/          api_client (HTTP + auth), chat_view, wiki_render, chem, text_utils, views_dock
+app/views/               specialised views auto-discovered by the dock — drop a file in to register
 tests/                   pytest unit tests (pure-function level)
 .streamlit/              config + secrets.toml.example
 ```
+
+**Deferred work lives in [`BACKLOG.md`](./BACKLOG.md)** — append-only log, one bullet per item, area-prefixed. Resolve by deleting the line in the same commit. Read it before adding new TODO comments to code.
 
 ## Hard rules
 
@@ -17,7 +20,8 @@ tests/                   pytest unit tests (pure-function level)
 2. **Markdown-source wiki, not Tiptap.** The trade-off was chosen deliberately. Do not reintroduce Tiptap/React rich-text components.
 3. **No JS toolchain.** Pure Python. The only React assets in the build come bundled inside `streamlit-ketcher` and `streamlit-markdown`.
 4. **Off-the-shelf over self-built.** If a Streamlit component or PyPI package covers a need, use it. If it doesn't, defer rather than build a custom React component.
-5. **Minimum code.** Repo target is under 1,000 application LOC. Project-wide ceiling across chemclaw2 + chemclaw2_gui is 6,000 LOC at v1.
+5. **Minimum code.** Repo target is under 2,000 application LOC. Project-wide ceiling across chemclaw2 + chemclaw2_gui is 6,000 LOC at v1.
+6. **After any review (code review, security audit, parity audit), abstract general rules from the findings into this file.** If a bug or smell got past prior review, it's because no rule excluded it. Add the rule under `## Gotchas` (or invent a new section) so a future Claude session — or a future human — would not repeat the mistake. Examples already captured this way: the `@st.cache_data` underscore-arg exclusion (caught us in the security audit), the chemclaw2 contract-pinning surface (caught us during contract drift), the slug-regex sync. **The pattern is: review finding → permanent CLAUDE.md rule, not just a one-off fix.**
 
 ## Stack
 

@@ -39,6 +39,10 @@ with st.sidebar:
     st.button("Sign out", on_click=st.logout)
     st.divider()
     _render_backend_health()
+    st.divider()
+    from app.components.views_dock import render_dock
+
+    render_dock()
 
 pages = [
     st.Page("pages/chat.py", title="Chat", icon="💬", default=True),

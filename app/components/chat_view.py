@@ -238,10 +238,20 @@ def _justification_form() -> None:
             st.rerun()
 
 
+_RECENT_TOOL_USES_CAP = 20
+
+
 def _commit_turn(result: ChatTurnResult) -> None:
     """Persist the assistant turn into chat_history and update session id."""
     if result.session_id:
         st.session_state.chat_session_id = result.session_id
+    # Track recent tool_uses so the views dock can match on what the agent
+    # has been doing (see app/views/*.matches). Capped to bound memory and
+    # keep heuristics weighted toward recent activity.
+    if result.tool_uses:
+        recent = st.session_state.get("chat_recent_tool_uses") or []
+        recent = (recent + list(result.tool_uses))[-_RECENT_TOOL_USES_CAP:]
+        st.session_state.chat_recent_tool_uses = recent
     if result.assistant_text:
         st.session_state.chat_history.append(("assistant", result.assistant_text))
         # Render wiki-ref expander for the just-finished turn. On the next rerun

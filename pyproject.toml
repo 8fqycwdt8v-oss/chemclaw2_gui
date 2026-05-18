@@ -1,7 +1,9 @@
 [project]
 name = "chemclaw2-gui"
 version = "0.1.0"
-description = "Streamlit GUI + FastAPI BFF for chemclaw2."
+description = "Streamlit GUI for chemclaw2."
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "streamlit>=1.40",

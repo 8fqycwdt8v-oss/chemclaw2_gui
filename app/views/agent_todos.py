@@ -1,12 +1,8 @@
-"""Agent todos view — STUB.
+"""Agent todos view.
 
-Activation gated on chemclaw2 shipping `GET /api/todos/{session_id}`.
-The `AgentTodo` table exists; sub-agents (deep-research) populate it;
-but there's no HTTP route to read it. Tracked in BACKLOG.md →
-[views/todos].
-
-Until then `matches()` fires after the agent has done meaningful work
-(3+ tool calls), but `render()` shows the "backend route missing" hint.
+Shows the task list the agent populates during long-running work
+(deep-research, synthesis campaigns). Activates heuristically after
+3+ tool calls in a session.
 """
 
 from __future__ import annotations
@@ -14,6 +10,8 @@ from __future__ import annotations
 from typing import Any
 
 import streamlit as st
+
+from app.components.api_client import get_todos
 
 ID = "todos"
 LABEL = "Agent todos"
@@ -26,12 +24,27 @@ def matches(state: dict[str, Any]) -> bool:
 
 
 def render_card(state: dict[str, Any]) -> None:
-    st.write(f"{ICON} **{LABEL}** · _backend route pending_")
+    tool_count = len(state.get("chat_recent_tool_uses") or [])
+    st.write(f"{ICON} **{LABEL}** · {tool_count} tool call{'s' if tool_count != 1 else ''}")
 
 
 def render(state: dict[str, Any]) -> None:
-    st.warning(
-        "Agent todo list is stored in the database but no HTTP route exposes "
-        "it. Activate this view by shipping `GET /api/todos/{session_id}` "
-        "on chemclaw2 — see [BACKLOG.md](./BACKLOG.md) entry `[views/todos]`."
-    )
+    session_id = state.get("chat_session_id")
+    if not session_id:
+        st.info("No active chat session — start a conversation to see agent tasks.")
+        return
+    try:
+        data = get_todos(session_id)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Could not load todos: {exc}")
+        return
+    todos = data.get("todos") or []
+    if not todos:
+        st.info("No tasks logged for this session yet.")
+        return
+    done = sum(1 for t in todos if t.get("status") == "done")
+    st.caption(f"{done}/{len(todos)} completed")
+    for todo in todos:
+        checked = todo.get("status") == "done"
+        label = todo.get("text", "")
+        st.checkbox(label, value=checked, disabled=True, key=f"todo_{todo.get('id', todo.get('position', 0))}")

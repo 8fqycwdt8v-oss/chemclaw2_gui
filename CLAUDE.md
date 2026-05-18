@@ -88,17 +88,15 @@ When chemclaw2's API changes, these three files are the surface that moves. Don'
 - **Slug regex must match chemclaw2's.** chemclaw2's `_SLUG_RE` (in `api/routes/wiki.py`) is `^[a-z0-9][a-z0-9-]*[a-z0-9]$`. Our `_WIKI_REF_RE` (text_utils.py) and `SLUG_RE` (pages/wiki.py) must stay aligned or refs won't resolve.
 - **View `matches()` must be exception-safe.** Locked by `tests/test_views_registry.py::test_matches_is_a_pure_function_of_state_dict` which runs `matches({})` for every registered view. If your `matches()` reads from anything that can fail when uninitialised (e.g., `st.user.sub` before sign-in, a cached API call that authenticates), wrap it. See `app/views/notifications.py:_safe_unread_count` for the pattern.
 
-## Backend prerequisites (chemclaw2 BACKLOG items, recommended)
+## Backend prerequisites (chemclaw2 BACKLOG items)
 
-1. Service-token auth path in `chemclaw2/api/auth.py` accepting `Bearer svc.<sub>.<iat>.<sig>` with a maxAge window on `iat`.
-2. `include_partial_messages=True` in `chemclaw2/api/agent/runner.py:ClaudeAgentOptions` (for token-by-token streaming UX).
-3. `X-Accel-Buffering: no` on `/api/chat` SSE response.
-4. **Teach the agent to emit `[wiki:slug]` references.** The GUI parses these
-   and renders a "📚 Referenced wiki pages" expander under each assistant turn
-   with clickable navigation. Append to `BASE_SYSTEM_PROMPT` in
-   `chemclaw2/api/agent/runner.py`: *"When you cite an org wiki page, also
-   embed `[wiki:slug]` (lowercase-with-hyphens) so the UI can offer a direct
-   navigation link."* Until this lands, the expander only renders when the
-   agent happens to use that syntax on its own.
+The service-token verifier shipped in chemclaw2 PR #87 — production auth is real;
+set `CHEMCLAW2_SERVICE_SECRET` to use it. Cross-repo contract is locked by
+`tests/test_api_client.py:test_hmac_token_matches_chemclaw2_verifier_contract`.
+
+Still pending in chemclaw2 (GUI side is ready):
+1. `include_partial_messages=True` in `chemclaw2/api/agent/runner.py:ClaudeAgentOptions` (token-by-token streaming).
+2. Append to `BASE_SYSTEM_PROMPT` in `chemclaw2/api/agent/runner.py`: *"When you cite an org wiki page, embed `[wiki:slug]` (lowercase-with-hyphens) so the UI can offer a direct navigation link."* The GUI parses these into the "📚 Referenced wiki pages" expander.
+3. Emit `{type:"view", view_id, payload?}` SSE envelopes for agent-driven view triggers. GUI dispatch is wired in `chat_view.dispatch_events`; renders "Open in &lt;View&gt;" buttons. No-op until chemclaw2 emits.
 
 See `README.md` for details.

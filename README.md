@@ -63,8 +63,10 @@ For Auth0 instead, uncomment the `[auth.auth0]` block in `secrets.toml.example` 
 
 chemclaw2's `api/auth.py` verifies Clerk JWTs. This GUI authenticates via Entra (or Auth0). The two IdPs don't trust each other's tokens, so Streamlit translates the identity at request time:
 
-- **Dev (default):** Streamlit sends `Authorization: Bearer mock:<entra-sub>`. chemclaw2 accepts this when its `CLERK_SECRET_KEY` is unset or starts with `sk_test_REPLACE` (its built-in mock mode — see `chemclaw2/api/auth.py:53-58`).
-- **Production:** set `CHEMCLAW2_SERVICE_SECRET` in `.env`. Streamlit then sends an HMAC-signed service token `Bearer svc.<sub>.<iat>.<sig>`. This requires chemclaw2 to implement the corresponding verifier — see "BACKLOG items in chemclaw2" below.
+- **Dev (default):** Streamlit sends `Authorization: Bearer mock:<entra-sub>`. chemclaw2 accepts this when its `CLERK_SECRET_KEY` is unset or starts with `sk_test_REPLACE` (its built-in mock mode — see `chemclaw2/api/auth.py`).
+- **Production:** set `CHEMCLAW2_SERVICE_SECRET` in `.env` (must match the secret on chemclaw2). Streamlit sends `Bearer svc.<sub>.<iat>.<sig>` where `sig = hmac_sha256(f"{sub}:{iat}", CHEMCLAW2_SERVICE_SECRET).hexdigest()`. chemclaw2's verifier (shipped in [chemclaw2 PR #87](https://github.com/8fqycwdt8v-oss/chemclaw2/pull/87) — `_verify_svc_token` in `api/auth.py`) enforces a 300s `iat` maxAge window and uses `hmac.compare_digest` for timing-safe signature verification.
+
+**Contract is locked by [`tests/test_api_client.py`](tests/test_api_client.py) (sub regex + HMAC construction) on this side, and `tests/test_auth_svc_token.py` on the chemclaw2 side. Any drift fails CI on both repos.**
 
 Streamlit's `st.login()` already verifies the user's IdP id_token against the IdP JWKS, so re-verifying server-side adds no security and is omitted.
 
@@ -72,9 +74,11 @@ Streamlit's `st.login()` already verifies the user's IdP id_token against the Id
 
 | # | Change in `chemclaw2` | Without it |
 |---|---|---|
-| 1 | Service-token auth path in `api/auth.py` accepting `Authorization: Bearer svc.<sub>.<iat>.<sig>` where `sig = hmac_sha256(f"{sub}:{iat}", CHEMCLAW2_SERVICE_SECRET).hexdigest()`. **Must enforce a maxAge window on `iat`** (recommended: 300s) to bound replay. | Production deploy must rely on chemclaw2's dev mock-token mode, which is not a production auth path. |
-| 2 | chemclaw2's `claude-agent-sdk` query options pass `include_partial_messages=True`. | Chat bubbles appear at end of turn, not token-by-token. GUI handles both cases. |
-| 3 | `X-Accel-Buffering: no` on `/api/chat` SSE — already present; verify. | SSE may buffer behind some proxies. |
+| 1 | chemclaw2's `claude-agent-sdk` query options pass `include_partial_messages=True`. | Chat bubbles appear at end of turn, not token-by-token. GUI handles both cases. |
+| 2 | Add `[wiki:slug]` system-prompt hint so the agent emits clickable wiki references. | The GUI's `extract_wiki_refs` (text_utils.py) parses these into a "📚 Referenced wiki pages" expander; fires only when the agent happens to use the syntax. |
+| 3 | Emit `{type:"view", view_id, payload?}` SSE envelopes for agent-driven view triggers. GUI dispatch is wired (`chat_view.dispatch_events`) and renders "Open in &lt;View&gt;" buttons — no-op until chemclaw2 emits. |
+
+The service-token verifier (originally BACKLOG #1) shipped in chemclaw2 PR #87 — production auth is now real, set `CHEMCLAW2_SERVICE_SECRET` to use it.
 
 ## Wiki content model
 

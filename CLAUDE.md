@@ -3,6 +3,14 @@
 Single-container Streamlit GUI for chemclaw2. No backend, no BFF — Streamlit
 calls chemclaw2's FastAPI directly.
 
+```
+app/main.py              entry: st.login gate, navigation, sidebar (health)
+app/pages/               chat, wiki, search Streamlit pages
+app/components/          api_client (HTTP + auth), chat_view, wiki_render, chem, text_utils
+tests/                   pytest unit tests (pure-function level)
+.streamlit/              config + secrets.toml.example
+```
+
 ## Hard rules
 
 1. **Backend lives in chemclaw2.** Do not duplicate Claude Agent SDK orchestration, DB queries, or MCP server logic here. The GUI calls chemclaw2 over HTTP; chemistry compute (RDKit/DRFP fingerprints) happens in `app/components/chem.py` only because chemclaw2's `/api/search` accepts pre-computed bits.
@@ -22,6 +30,27 @@ calls chemclaw2's FastAPI directly.
 | HTTP client | `httpx` (sync + streaming) |
 | Auth | Streamlit `st.login()` OIDC (Microsoft Entra ID default); request-time identity translation to chemclaw2 in `app/components/api_client.py` |
 | Service-to-service | `Bearer mock:<sub>` in dev; HMAC-SHA256 `svc.<sub>.<iat>.<sig>` in prod (chemclaw2 BACKLOG item for the verifier) |
+
+## Commands
+
+```bash
+# First-time setup. Intel Mac: append --no-install-package rdkit
+# (rdkit dropped Intel wheels after 2024.3.5).
+uv sync
+
+# Tests — --no-sync skips rdkit reinstall attempts on every invocation.
+uv run --no-sync pytest -q
+
+# Lint + format
+uv run --no-sync ruff check .
+uv run --no-sync ruff format
+
+# Streamlit dev (needs .streamlit/secrets.toml + .env populated).
+uv run --no-sync streamlit run app/main.py
+
+# Docker — production-realistic; uses Linux rdkit wheels.
+docker compose up --build
+```
 
 ## Anti-features
 
@@ -45,6 +74,14 @@ chemclaw2's HTTP contract is consumed at:
 - `app/components/chem.py` — Morgan/DRFP fingerprint format that matches what chemclaw2's MCP servers produce (so bits compare against stored bits).
 
 When chemclaw2's API changes, these three files are the surface that moves. Don't add backwards-compatibility shims — just update.
+
+## Gotchas
+
+- **`@st.cache_data` excludes `_`-prefixed parameters from the cache key.** A function decorated `@st.cache_data` cached by `def f(_user_sub: str)` is *globally cached* regardless of the arg's value — Streamlit treats `_`-prefix as "don't hash this." Use `user_sub` (no underscore) when you want per-user caching. See `app/components/api_client.py:_list_projects_cached`.
+- **Intel Mac dev: no RDKit wheel after 2024.3.5.** `uv sync --no-install-package rdkit` succeeds and the test suite still passes (chem helpers are deferred-imported in `api_client.py`). For full validation use Docker Compose.
+- **Sibling repos.** Backend lives at `/Users/robertmoeckel/Documents/VSCode/chemclaw2` (FastAPI Python). Local-dev DB + mock services at `/Users/robertmoeckel/Documents/VSCode/chemclaw2_mockdata`. Both must be running for end-to-end testing.
+- **chemclaw2 dev-mode auth.** When chemclaw2's `CLERK_SECRET_KEY` is unset or starts with `sk_test_REPLACE`, it accepts `Bearer mock:<userId>` — the GUI's default. Production must set both `CLERK_SECRET_KEY` on chemclaw2 *and* `CHEMCLAW2_SERVICE_SECRET` on this side, plus implement the HMAC verifier (chemclaw2 BACKLOG #1).
+- **Slug regex must match chemclaw2's.** chemclaw2's `_SLUG_RE` (in `api/routes/wiki.py`) is `^[a-z0-9][a-z0-9-]*[a-z0-9]$`. Our `_WIKI_REF_RE` (text_utils.py) and `SLUG_RE` (pages/wiki.py) must stay aligned or refs won't resolve.
 
 ## Backend prerequisites (chemclaw2 BACKLOG items, recommended)
 

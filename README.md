@@ -100,12 +100,46 @@ tests/           pytest unit tests (SSE dispatch + wiki render)
 .streamlit/      Streamlit config + secrets template
 ```
 
-## Deployment
+## Deployment (Fly.io)
 
-Single Streamlit container. Deploy as one Azure Container App / Fly app / equivalent. Set env vars per `.env.example` as container-app secrets:
-- `CHEMCLAW2_API_URL` — public or private URL of the chemclaw2 backend
-- `CHEMCLAW2_SERVICE_SECRET` (production only)
-- Streamlit secrets (`.streamlit/secrets.toml`) mounted as a secret-file volume
+`fly.toml` ships a production config: single Streamlit machine in `fra`, one warm instance (Streamlit cold-start is multi-second), healthcheck on `/_stcore/health`, autoscale up on demand.
+
+```bash
+# First-time setup
+fly launch --no-deploy --copy-config           # uses the committed fly.toml
+fly secrets set \
+  CHEMCLAW2_API_URL="https://chemclaw2.fly.dev" \
+  CHEMCLAW2_SERVICE_SECRET="$(openssl rand -hex 32)" \
+  STREAMLIT_LOGIN_PROVIDER="microsoft"
+
+# Mount the Streamlit secrets file (cookie_secret + OIDC client_id/secret)
+fly secrets set --stage STREAMLIT_SECRETS_TOML="$(cat .streamlit/secrets.toml)"
+# … then add a startup wrapper that writes /app/.streamlit/secrets.toml from
+# the env var on boot (one-shot; see "Secret rotation" below).
+
+fly deploy
+```
+
+**Cross-repo invariant**: `CHEMCLAW2_SERVICE_SECRET` MUST be identical on the chemclaw2 Fly app and this one. Setting one without the other instantly breaks auth.
+
+```bash
+# Read the secret-fingerprint to compare without exposing the value
+fly ssh console -a chemclaw2     -C 'sha256sum /app/.env 2>/dev/null'
+fly ssh console -a chemclaw2-gui -C 'env | grep CHEMCLAW2_SERVICE_SECRET | sha256sum'
+```
+
+### Secret rotation runbook
+
+| Secret | Rotation steps | Blast radius |
+|---|---|---|
+| `CHEMCLAW2_SERVICE_SECRET` | Generate new value → `fly secrets set` on **both** apps (chemclaw2 + chemclaw2_gui) in quick succession → confirm both rolled to the new image (`fly status`) → existing in-flight requests fail with 401 for ~30s; users retry transparently. | Brief 401 window during rollout. Coordinate the two `secrets set` calls — both must propagate before users hit the next request. |
+| Streamlit `cookie_secret` | Generate `python -c "import secrets; print(secrets.token_urlsafe(32))"` → update `secrets.toml` → `fly secrets set STREAMLIT_SECRETS_TOML=…` → deploy → **all signed-in users are logged out** (cookies signed with old secret no longer verify). | All sessions invalidated. Plan around a low-traffic window. |
+| Entra/Auth0 `client_secret` | Rotate in the IdP first (Certificates & secrets → New client secret), update `secrets.toml`, redeploy. Old secret stays valid in Entra until you delete it — overlap window lets you roll forward then deactivate. | Zero downtime if you overlap secrets in the IdP. |
+| Clerk JWT verification on chemclaw2 | Not our concern; chemclaw2 owns its Clerk integration. | n/a |
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push and PR: ruff lint + format-check + pytest (57 tests at last count) + a fingerprint-invariant assertion that catches RDKit/drfp upgrades silently changing bit lengths.
 
 ## Conventions
 

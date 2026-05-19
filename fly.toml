@@ -1,0 +1,50 @@
+# Production Fly.io config. Apply with `fly deploy`.
+#
+# Region matches chemclaw2 (fra) to keep GUI→backend latency low — the
+# Streamlit container makes server-side HTTP calls to chemclaw2 on every
+# user interaction, and inter-region hops would compound.
+#
+# Secrets (set via `fly secrets set KEY=VALUE` BEFORE first deploy):
+#   CHEMCLAW2_API_URL              public/private URL of the chemclaw2 backend
+#   CHEMCLAW2_SERVICE_SECRET       shared with chemclaw2; same value on both sides
+#   STREAMLIT_LOGIN_PROVIDER       "microsoft" or "auth0"
+#
+# Streamlit's [auth] secrets (cookie_secret, OIDC client_id/secret) live in
+# `.streamlit/secrets.toml` and are mounted at /app/.streamlit/secrets.toml.
+# Use `fly secrets set` with a multi-line value, or mount via Fly Files.
+
+app = "chemclaw2-gui"
+primary_region = "fra"
+
+[build]
+
+[env]
+  PORT = "8501"
+
+[http_service]
+  internal_port = 8501
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Keep one machine warm — Streamlit's cold start is several seconds
+  # and st.user.is_logged_in checks would fail-loud on a chilled boot.
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    # Streamlit holds long-lived WebSocket connections per active user;
+    # softer limits than chemclaw2 (which serves short-lived HTTP only).
+    hard_limit = 100
+    soft_limit = 75
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    path = "/_stcore/health"
+    timeout = "5s"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

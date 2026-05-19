@@ -390,9 +390,7 @@ def get_notifications(unread_only: bool = True, limit: int = 50) -> dict[str, An
         return r.json()
 
 
-def mark_notifications_read(
-    *, ids: list[str] | None = None, all_: bool = False
-) -> dict[str, Any]:
+def mark_notifications_read(*, ids: list[str] | None = None, all_: bool = False) -> dict[str, Any]:
     """PATCH /api/notifications. Provide either ids OR all_=True. Returns {marked_read: int}.
 
     Busts the cached_unread_notifications cache so the next render sees the new count.

@@ -37,9 +37,7 @@ def build_state() -> dict[str, Any]:
     Keep this small — every key here becomes part of the matcher contract.
     """
     history = st.session_state.get("chat_history") or []
-    last_assistant = next(
-        (text for role, text in reversed(history) if role == "assistant"), ""
-    )
+    last_assistant = next((text for role, text in reversed(history) if role == "assistant"), "")
     return {
         "chat_recent_tool_uses": st.session_state.get("chat_recent_tool_uses") or [],
         "chat_session_id": st.session_state.get("chat_session_id"),
@@ -61,9 +59,7 @@ def _init_state() -> None:
 
 def _active_views(state: dict[str, Any]) -> list[View]:
     pinned = st.session_state.dock_pinned
-    return [
-        v for v in VIEWS.values() if v.id in pinned or v.matches(state)
-    ]
+    return [v for v in VIEWS.values() if v.id in pinned or v.matches(state)]
 
 
 def _handle_quick_open(query: str) -> None:

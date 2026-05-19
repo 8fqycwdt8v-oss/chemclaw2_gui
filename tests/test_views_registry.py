@@ -56,9 +56,7 @@ def test_commands_are_unique_across_views() -> None:
     seen: dict[str, str] = {}
     for view in VIEWS.values():
         for cmd in view.commands:
-            assert cmd not in seen, (
-                f"command `{cmd}` claimed by both `{seen[cmd]}` and `{view.id}`"
-            )
+            assert cmd not in seen, f"command `{cmd}` claimed by both `{seen[cmd]}` and `{view.id}`"
             seen[cmd] = view.id
 
 

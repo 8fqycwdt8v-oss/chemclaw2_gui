@@ -65,9 +65,7 @@ def test_auth_header_hmac_format(monkeypatch: pytest.MonkeyPatch) -> None:
     import hashlib
     import hmac
 
-    expected_sig = hmac.new(
-        b"shh", b"user-1:1700000000", hashlib.sha256
-    ).hexdigest()
+    expected_sig = hmac.new(b"shh", b"user-1:1700000000", hashlib.sha256).hexdigest()
     assert api_client._auth_header() == {
         "Authorization": f"Bearer svc.user-1.1700000000.{expected_sig}"
     }
@@ -127,7 +125,5 @@ def test_hmac_token_matches_chemclaw2_verifier_contract(
     assert abs(int(real_time.time()) - iat) <= 300
 
     # Constraint 4: sig matches HMAC of f"{sub}:{iat}"
-    expected = hmac.new(
-        b"shared-secret", f"{sub}:{iat}".encode(), hashlib.sha256
-    ).hexdigest()
+    expected = hmac.new(b"shared-secret", f"{sub}:{iat}".encode(), hashlib.sha256).hexdigest()
     assert hmac.compare_digest(expected, sig)

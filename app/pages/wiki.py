@@ -58,9 +58,7 @@ def _list_view() -> None:
         project_choices = ["(all projects)", *projects]
         chosen = st.selectbox("Project", project_choices, key="wiki_project_filter")
         project = None if chosen == "(all projects)" else chosen
-        include_archived = st.checkbox(
-            "Include archived", value=False, key="wiki_include_archived"
-        )
+        include_archived = st.checkbox("Include archived", value=False, key="wiki_include_archived")
 
     col_search, col_new = st.columns([3, 1])
     with col_search:
@@ -86,9 +84,7 @@ def _list_view() -> None:
         title = page.get("title", slug)
         prefix = "📦 " if page.get("archived") else "📄 "
         review_tag = " · _needs review_" if page.get("needs_review") else ""
-        if st.button(
-            f"{prefix}{title}{review_tag}", key=f"open_{slug}", use_container_width=True
-        ):
+        if st.button(f"{prefix}{title}{review_tag}", key=f"open_{slug}", use_container_width=True):
             st.session_state.wiki_slug = slug
             st.session_state.wiki_mode = "view"
             st.rerun()

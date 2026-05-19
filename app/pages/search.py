@@ -27,9 +27,7 @@ with text_tab:
                     st.caption(excerpt)
 
 with compound_tab:
-    smiles = st.text_input(
-        "Compound SMILES", placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O", key="cmp_q"
-    )
+    smiles = st.text_input("Compound SMILES", placeholder="e.g. CC(=O)Oc1ccccc1C(=O)O", key="cmp_q")
     limit = st.slider("Limit", 5, 50, 20, key="cmp_limit")
     min_score = st.slider(
         "Min Tanimoto",

@@ -41,9 +41,7 @@ def parse(markdown: str) -> list[Block]:
             if chunk:
                 blocks.append(MarkdownBlock(chunk))
         payload = match["payload"].strip()
-        blocks.append(
-            MoleculeBlock(payload) if match["kind"] == "mol" else ReactionBlock(payload)
-        )
+        blocks.append(MoleculeBlock(payload) if match["kind"] == "mol" else ReactionBlock(payload))
         cursor = match.end()
     if cursor < len(markdown):
         tail = markdown[cursor:].strip("\n")

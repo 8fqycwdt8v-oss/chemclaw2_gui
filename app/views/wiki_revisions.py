@@ -81,9 +81,7 @@ def _render_single_version(slug: str, version: int) -> None:
         st.error(f"Failed to load v{version} of `{slug}`: {exc}")
         return
     st.subheader(f"v{rev.get('version')} · {rev.get('title', slug)}")
-    st.caption(
-        f"{relative_time(rev.get('updated_at'))} · by `{rev.get('updated_by') or 'system'}`"
-    )
+    st.caption(f"{relative_time(rev.get('updated_at'))} · by `{rev.get('updated_by') or 'system'}`")
     st.divider()
     text = rev.get("content_text") or "_(empty)_"
     st.markdown(text)

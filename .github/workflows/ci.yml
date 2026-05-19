@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.9.27"
+          enable-cache: true
+
+      - name: Pin Python
+        run: uv python install 3.12
+
+      - name: Sync (frozen, with dev group)
+        # rdkit Linux wheels exist, so no --no-install-package dance here
+        # (that's only for Intel-Mac dev environments).
+        run: uv sync --frozen --group dev
+
+      - name: Ruff lint
+        run: uv run --no-sync ruff check .
+
+      - name: Ruff format check
+        run: uv run --no-sync ruff format --check .
+
+      - name: Pytest
+        run: uv run --no-sync pytest -q
+
+      - name: Assert RDKit Morgan + DRFP produce 2048 bits
+        # Cross-repo invariant: chemclaw2's /api/search rejects anything that
+        # isn't exactly 2048 binary chars. If RDKit/drfp change defaults,
+        # production breaks silently. Lock the invariant here too.
+        run: |
+          uv run --no-sync python -c "
+          from app.components.chem import morgan_bits, drfp_bits
+          assert len(morgan_bits('CCO')) == 2048, 'Morgan must be 2048 bits'
+          assert len(drfp_bits('CC>>CCC')) == 2048, 'DRFP must be 2048 bits'
+          assert set(morgan_bits('CCO')) <= {'0', '1'}, 'Morgan must be binary'
+          print('Fingerprint format invariants OK')
+          "

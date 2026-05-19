@@ -85,8 +85,6 @@ def render(state: dict[str, Any]) -> None:
                 st.write(f"{prefix}`{kind}` · {_format_payload(n.get('payload'))}")
                 st.caption(str(n.get("created_at", "")))
             with cols[1]:
-                if not read and st.button(
-                    "✓", key=f"notif_read_{n['id']}", help="Mark read"
-                ):
+                if not read and st.button("✓", key=f"notif_read_{n['id']}", help="Mark read"):
                     mark_notifications_read(ids=[n["id"]])
                     st.rerun()

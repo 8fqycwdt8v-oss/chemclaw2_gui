@@ -8,9 +8,10 @@ import re
 from datetime import UTC, datetime
 
 # Match `[wiki:slug]` where slug follows chemclaw2's slug rules
-# (^[a-z0-9][a-z0-9-]*[a-z0-9]?$ — see api/routes/wiki.py:_SLUG_RE).
+# (^[a-z0-9][a-z0-9-]*[a-z0-9]$ — see api/routes/wiki.py:_SLUG_RE).
+# Requires ≥2 chars to match chemclaw2 + pages/wiki.py:SLUG_RE.
 # Captures unique slugs in order of first appearance.
-_WIKI_REF_RE = re.compile(r"\[wiki:([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\]")
+_WIKI_REF_RE = re.compile(r"\[wiki:([a-z0-9][a-z0-9-]*[a-z0-9])\]")
 
 
 def extract_wiki_refs(text: str) -> list[str]:

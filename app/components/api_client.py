@@ -87,7 +87,8 @@ def list_wiki_pages(
     with _client() as c:
         r = c.get("/api/wiki", params=params or None)
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def list_projects() -> list[str]:
@@ -131,7 +132,8 @@ def get_wiki_page(slug: str) -> dict[str, Any]:
     with _client() as c:
         r = c.get(f"/api/wiki/{slug}")
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def upsert_wiki_page(slug: str, title: str, markdown: str) -> dict[str, Any]:
@@ -150,7 +152,7 @@ def upsert_wiki_page(slug: str, title: str, markdown: str) -> dict[str, Any]:
         result: dict[str, Any] = r.json()
     # New page may have introduced a new project — bust the projects cache so
     # the wiki sidebar dropdown picks it up on next render.
-    list_projects.clear()
+    list_projects.clear()  # type: ignore[attr-defined]
     return result
 
 
@@ -178,7 +180,7 @@ def patch_wiki_page(
         result: dict[str, Any] = r.json()
     # Re-assigning project may add/remove a name from the global set.
     if project is not None:
-        list_projects.clear()
+        list_projects.clear()  # type: ignore[attr-defined]
     return result
 
 
@@ -186,7 +188,8 @@ def search_text(q: str, limit: int = 20) -> dict[str, Any]:
     with _client() as c:
         r = c.get("/api/search", params={"q": q, "limit": limit})
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def search_compound(smiles: str, limit: int = 20, min_score: float = 0.4) -> dict[str, Any]:
@@ -202,7 +205,8 @@ def search_compound(smiles: str, limit: int = 20, min_score: float = 0.4) -> dic
             json={"fingerprint_bits": bits, "limit": limit, "min_score": min_score},
         )
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def search_reaction(
@@ -217,7 +221,8 @@ def search_reaction(
             json={"rxn_fingerprint_bits": bits, "limit": limit, "min_score": min_score},
         )
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -231,6 +236,8 @@ def get_backend_health() -> dict[str, Any]:
     """
     try:
         with _client() as c:
+            # Tighter than REQUEST_TIMEOUT_S so the sidebar health fragment
+            # doesn't block page rendering when chemclaw2 is slow.
             r = c.get("/api/health", timeout=5)
             r.raise_for_status()
             data: dict[str, Any] = r.json()
@@ -244,7 +251,8 @@ def get_todos(session_id: str) -> dict[str, Any]:
     with _client() as c:
         r = c.get(f"/api/todos/{session_id}")
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def list_campaigns(cursor: str | None = None) -> dict[str, Any]:
@@ -255,7 +263,8 @@ def list_campaigns(cursor: str | None = None) -> dict[str, Any]:
     with _client() as c:
         r = c.get("/api/campaigns", params=params or None)
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def get_campaign(campaign_id: str) -> dict[str, Any]:
@@ -263,7 +272,8 @@ def get_campaign(campaign_id: str) -> dict[str, Any]:
     with _client() as c:
         r = c.get(f"/api/campaigns/{campaign_id}")
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def get_wiki_contradictions(slug: str, resolved: bool = False) -> dict[str, Any]:
@@ -271,7 +281,8 @@ def get_wiki_contradictions(slug: str, resolved: bool = False) -> dict[str, Any]
     with _client() as c:
         r = c.get(f"/api/wiki/{slug}/contradictions", params={"resolved": str(resolved).lower()})
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def get_wiki_revisions(slug: str, limit: int = 20) -> dict[str, Any]:
@@ -281,7 +292,8 @@ def get_wiki_revisions(slug: str, limit: int = 20) -> dict[str, Any]:
     with _client() as c:
         r = c.get(f"/api/wiki/{slug}/revisions", params={"limit": limit})
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def get_wiki_revision(slug: str, version: int) -> dict[str, Any]:
@@ -289,7 +301,8 @@ def get_wiki_revision(slug: str, version: int) -> dict[str, Any]:
     with _client() as c:
         r = c.get(f"/api/wiki/{slug}/revisions/{version}")
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def list_subscriptions() -> dict[str, Any]:
@@ -298,7 +311,8 @@ def list_subscriptions() -> dict[str, Any]:
     with _client() as c:
         r = c.get("/api/wiki/subscriptions")
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def subscribe_wiki(slug: str) -> dict[str, Any]:
@@ -306,7 +320,7 @@ def subscribe_wiki(slug: str) -> dict[str, Any]:
         r = c.post(f"/api/wiki/{slug}/subscribe")
         r.raise_for_status()
         result: dict[str, Any] = r.json()
-    cached_subscription_slugs.clear()
+    cached_subscription_slugs.clear()  # type: ignore[attr-defined]
     return result
 
 
@@ -315,7 +329,7 @@ def unsubscribe_wiki(slug: str) -> dict[str, Any]:
         r = c.delete(f"/api/wiki/{slug}/subscribe")
         r.raise_for_status()
         result: dict[str, Any] = r.json()
-    cached_subscription_slugs.clear()
+    cached_subscription_slugs.clear()  # type: ignore[attr-defined]
     return result
 
 
@@ -325,7 +339,7 @@ def mark_wiki_seen(slug: str, version: int) -> dict[str, Any]:
         r = c.post(f"/api/wiki/{slug}/seen", json={"version": version})
         r.raise_for_status()
         result: dict[str, Any] = r.json()
-    cached_subscription_slugs.clear()  # last_seen_version changed; bust the badge cache
+    cached_subscription_slugs.clear()  # type: ignore[attr-defined]
     return result
 
 
@@ -344,7 +358,11 @@ def _cached_subscription_slugs_inner(user_sub: str) -> set[str]:
     del user_sub
     try:
         subs = list_subscriptions().get("subscriptions") or []
-    except Exception:  # noqa: BLE001
+    except httpx.HTTPError:
+        # Network / 4xx / 5xx → degrade to "not subscribed" so the Subscribe
+        # button still renders. Other exceptions (e.g., bad JSON) should
+        # surface — they indicate a chemclaw2 contract change, not a
+        # transient backend hiccup.
         return set()
     return {s["slug"] for s in subs if isinstance(s.get("slug"), str)}
 
@@ -368,7 +386,8 @@ def post_feedback(
     with _client() as c:
         r = c.post("/api/feedback", json=body)
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def get_session_feedback(session_id: str) -> dict[str, Any]:
@@ -376,7 +395,8 @@ def get_session_feedback(session_id: str) -> dict[str, Any]:
     with _client() as c:
         r = c.get(f"/api/feedback/{session_id}")
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def list_audit_overrides(
@@ -397,7 +417,8 @@ def list_audit_overrides(
     with _client() as c:
         r = c.get("/api/audit/overrides", params=params)
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def list_audit_redactions(
@@ -412,7 +433,8 @@ def list_audit_redactions(
     with _client() as c:
         r = c.get("/api/audit/redactions", params=params)
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def get_my_budget() -> dict[str, Any]:
@@ -421,7 +443,8 @@ def get_my_budget() -> dict[str, Any]:
     with _client() as c:
         r = c.get(f"/api/budgets/{project_key}")
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def list_tool_permissions(
@@ -436,7 +459,8 @@ def list_tool_permissions(
     with _client() as c:
         r = c.get("/api/admin/tool-permissions", params=params or None)
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def get_notifications(unread_only: bool = True, limit: int = 50) -> dict[str, Any]:
@@ -447,7 +471,8 @@ def get_notifications(unread_only: bool = True, limit: int = 50) -> dict[str, An
             params={"unread_only": str(unread_only).lower(), "limit": limit},
         )
         r.raise_for_status()
-        return r.json()
+        data: dict[str, Any] = r.json()
+        return data
 
 
 def mark_notifications_read(*, ids: list[str] | None = None, all_: bool = False) -> dict[str, Any]:
@@ -464,7 +489,7 @@ def mark_notifications_read(*, ids: list[str] | None = None, all_: bool = False)
         r = c.patch("/api/notifications", json=body)
         r.raise_for_status()
         result: dict[str, Any] = r.json()
-    cached_unread_notifications.clear()
+    cached_unread_notifications.clear()  # type: ignore[attr-defined]
     return result
 
 
@@ -481,7 +506,9 @@ def _cached_unread_notifications_inner(user_sub: str) -> dict[str, Any]:
     del user_sub  # cache-key only; see list_projects for the pattern rationale.
     try:
         return get_notifications(unread_only=True, limit=50)
-    except Exception:  # noqa: BLE001 — degrade to "no notifications" on failure
+    except httpx.HTTPError:
+        # Degrade to "no notifications" on backend errors so the dock badge
+        # disappears rather than crashing. Non-HTTP failures should surface.
         return {"notifications": [], "unread_count": 0}
 
 

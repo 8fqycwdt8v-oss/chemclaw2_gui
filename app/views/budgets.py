@@ -46,6 +46,12 @@ def _bar(label: str, used: int | None, cap: int | None) -> None:
 def render(state: dict[str, Any]) -> None:
     try:
         data = get_my_budget()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 403:
+            st.error("Admin access required.")
+            return
+        st.error(f"Failed to load budget: {exc}")
+        return
     except httpx.HTTPError as exc:
         st.error(f"Failed to load budget: {exc}")
         return

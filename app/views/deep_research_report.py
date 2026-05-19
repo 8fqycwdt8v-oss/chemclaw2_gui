@@ -15,6 +15,8 @@ from typing import Any
 
 import streamlit as st
 
+from app.components.nav import navigate_to_wiki
+
 ID = "research"
 LABEL = "Research report"
 ICON = "📄"
@@ -53,10 +55,8 @@ def render(state: dict[str, Any]) -> None:
         # Quick-save: prefills the new-wiki-page form via session_state and
         # jumps to the wiki page. The user fills in slug+title and saves.
         if st.button("💾 Save to wiki", key="research_save_to_wiki"):
-            st.session_state.wiki_mode = "new"
             st.session_state.wiki_prefill_markdown = text
-            st.session_state.active_view_id = None  # close dialog
-            st.switch_page("pages/wiki.py")
+            navigate_to_wiki(mode="new")
     with col2:
         st.download_button(
             "⬇ Download .md",

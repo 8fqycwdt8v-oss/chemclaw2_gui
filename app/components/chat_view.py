@@ -294,6 +294,8 @@ def _justification_form() -> None:
             st.rerun()
 
 
+# Bounds session_state memory and keeps view-trigger heuristics weighted
+# toward recent activity. Tuned to ~5 turns of typical tool-heavy agent work.
 _RECENT_TOOL_USES_CAP = 20
 
 

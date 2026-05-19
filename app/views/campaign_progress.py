@@ -40,7 +40,7 @@ def render_card(state: dict[str, Any]) -> None:
     st.write(f"{ICON} **{LABEL}** · {active} campaign tool{'s' if active != 1 else ''} used")
 
 
-def _step_table(steps: list[dict]) -> None:
+def _step_table(steps: list[dict[str, Any]]) -> None:
     if not steps:
         st.caption("No steps yet.")
         return

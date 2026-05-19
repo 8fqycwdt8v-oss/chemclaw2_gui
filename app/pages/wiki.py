@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 import httpx
 import streamlit as st
@@ -39,8 +40,8 @@ def _render_blocks(markdown: str, key_prefix: str) -> None:
             st_ketcher(block.smiles, height=300, key=f"{key_prefix}_mol_{i}")
         elif isinstance(block, ReactionBlock):
             try:
-                rxn = AllChem.ReactionFromSmarts(block.reaction_smiles, useSmiles=True)
-                img = Draw.ReactionToImage(rxn)
+                rxn = AllChem.ReactionFromSmarts(block.reaction_smiles, useSmiles=True)  # type: ignore[attr-defined]
+                img = Draw.ReactionToImage(rxn)  # type: ignore[no-untyped-call]
                 st.image(img, caption=block.reaction_smiles)
             except Exception as exc:  # noqa: BLE001 — RDKit raises broad exceptions
                 st.warning(f"Invalid reaction SMILES: `{block.reaction_smiles}` ({exc})")
@@ -90,7 +91,7 @@ def _list_view() -> None:
             st.rerun()
 
 
-def _metadata_expander(slug: str, page: dict) -> None:
+def _metadata_expander(slug: str, page: dict[str, Any]) -> None:
     """PATCH metadata form (needs_review / archived / maturity / project)."""
     with st.expander("Metadata", expanded=False):
         current_maturity = page.get("maturity") or "exploratory"
@@ -119,7 +120,7 @@ def _metadata_expander(slug: str, page: dict) -> None:
 
         if st.button("Save metadata", key=f"meta_save_{slug}"):
             # Only send fields the user actually changed; reduces noise in audit log.
-            changes: dict[str, object] = {}
+            changes: dict[str, Any] = {}
             if needs_review != bool(page.get("needs_review")):
                 changes["needs_review"] = needs_review
             if archived != bool(page.get("archived")):
@@ -142,7 +143,7 @@ def _metadata_expander(slug: str, page: dict) -> None:
             st.rerun()
 
 
-def _citations_footer(page: dict) -> None:
+def _citations_footer(page: dict[str, Any]) -> None:
     """Render the page's citations as a numbered ## References footer."""
     lines = format_citations(page.get("citations") or [])
     if not lines:
@@ -218,7 +219,7 @@ def _subscribe_button(slug: str) -> None:
             st.rerun()
 
 
-def _auto_mark_seen(slug: str, page: dict) -> None:
+def _auto_mark_seen(slug: str, page: dict[str, Any]) -> None:
     """Mark the current page version as seen when the user opens it.
 
     Only fires once per (slug, version) per Streamlit session to avoid spamming
@@ -240,7 +241,7 @@ def _auto_mark_seen(slug: str, page: dict) -> None:
     st.session_state[key] = True
 
 
-def _freshness_header(page: dict) -> None:
+def _freshness_header(page: dict[str, Any]) -> None:
     """One-line caption: updated time, by whom, version, maturity badge."""
     updated = relative_time(page.get("updated_at"))
     updated_by = page.get("updated_by") or "system"

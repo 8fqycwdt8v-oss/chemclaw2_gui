@@ -21,8 +21,9 @@ def morgan_bits(smiles: str) -> str:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f"Invalid SMILES: {smiles}")
-    fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)
-    return fp.ToBitString()
+    fp = AllChem.GetMorganFingerprintAsBitVect(mol, radius=2, nBits=2048)  # type: ignore[attr-defined]
+    bits: str = fp.ToBitString()
+    return bits
 
 
 def drfp_bits(rxn_smiles: str) -> str:

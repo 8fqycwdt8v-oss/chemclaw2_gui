@@ -84,6 +84,24 @@ def test_post_feedback_rejects_invalid_score(monkeypatch: pytest.MonkeyPatch) ->
         api_client.post_feedback("session-1", 0, -2)
 
 
+def test_cached_wrappers_expose_clear_attribute() -> None:
+    """The cache-busting `.clear()` is monkey-patched onto the public
+    wrappers (see api_client.py: list_projects.clear / cached_*.clear).
+    Renaming the inner function silently breaks this. Lock the contract.
+    """
+    assert callable(getattr(api_client.list_projects, "clear", None)), (
+        "list_projects.clear is missing — cache busting on wiki write will silently no-op."
+    )
+    assert callable(getattr(api_client.cached_subscription_slugs, "clear", None)), (
+        "cached_subscription_slugs.clear is missing — subscribe/unsubscribe "
+        "won't invalidate the dock's subscription badge."
+    )
+    assert callable(getattr(api_client.cached_unread_notifications, "clear", None)), (
+        "cached_unread_notifications.clear is missing — mark-read won't "
+        "invalidate the notifications dock badge."
+    )
+
+
 def test_hmac_token_matches_chemclaw2_verifier_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

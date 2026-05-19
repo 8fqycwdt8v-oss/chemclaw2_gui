@@ -30,7 +30,8 @@ def _safe_unread_count() -> int:
     registry contract (tests/test_views_registry.py). The cached fetch reads
     `st.user.sub` which raises before sign-in. Treat any failure as zero."""
     try:
-        return cached_unread_notifications().get("unread_count", 0)
+        count: int = cached_unread_notifications().get("unread_count", 0)
+        return count
     except Exception:  # noqa: BLE001
         return 0
 

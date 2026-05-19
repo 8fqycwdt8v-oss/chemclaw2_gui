@@ -32,8 +32,11 @@ jobs:
       - name: Ruff format check
         run: uv run --no-sync ruff format --check .
 
+      - name: Mypy
+        run: uv run --no-sync mypy app tests
+
       - name: Pytest
-        run: uv run --no-sync pytest -q
+        run: uv run --no-sync pytest -q --cov=app --cov-report=term-missing
 
       - name: Assert RDKit Morgan + DRFP produce 2048 bits
         # Cross-repo invariant: chemclaw2's /api/search rejects anything that

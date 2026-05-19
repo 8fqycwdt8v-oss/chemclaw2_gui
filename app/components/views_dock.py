@@ -115,11 +115,11 @@ def render_dock() -> None:
     # dialog overlays the whole page regardless of where it's called from,
     # but invoking it from inside the sidebar context is fine.
     if st.session_state.active_view_id:
-        view = VIEWS.get(st.session_state.active_view_id)
-        if view is None:
+        active_view = VIEWS.get(st.session_state.active_view_id)
+        if active_view is None:
             st.session_state.active_view_id = None
         else:
-            _open_dialog(view, state)
+            _open_dialog(active_view, state)
 
 
 def _open_dialog(view: View, state: dict[str, Any]) -> None:

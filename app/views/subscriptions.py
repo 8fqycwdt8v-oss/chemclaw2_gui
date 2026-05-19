@@ -16,6 +16,7 @@ from typing import Any
 import streamlit as st
 
 from app.components.api_client import list_subscriptions
+from app.components.nav import navigate_to_wiki
 
 ID = "subscriptions"
 LABEL = "Subscriptions"
@@ -75,7 +76,4 @@ def render(state: dict[str, Any]) -> None:
             st.caption(f"`{slug}`")
         with col2:
             if st.button("Open", key=f"sub_open_{slug}"):
-                st.session_state.wiki_slug = slug
-                st.session_state.wiki_mode = "view"
-                st.session_state.active_view_id = None
-                st.switch_page("pages/wiki.py")
+                navigate_to_wiki(slug)

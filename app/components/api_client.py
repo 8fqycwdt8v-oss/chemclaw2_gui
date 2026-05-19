@@ -379,6 +379,66 @@ def get_session_feedback(session_id: str) -> dict[str, Any]:
         return r.json()
 
 
+def list_audit_overrides(
+    *,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    gate_name: str | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """ADMIN-ONLY on chemclaw2. Raises httpx.HTTPStatusError(403) for non-admins."""
+    params: dict[str, Any] = {"limit": limit}
+    if user_id:
+        params["user_id"] = user_id
+    if session_id:
+        params["session_id"] = session_id
+    if gate_name:
+        params["gate_name"] = gate_name
+    with _client() as c:
+        r = c.get("/api/audit/overrides", params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+def list_audit_redactions(
+    *, user_id: str | None = None, session_id: str | None = None, limit: int = 50
+) -> dict[str, Any]:
+    """ADMIN-ONLY on chemclaw2."""
+    params: dict[str, Any] = {"limit": limit}
+    if user_id:
+        params["user_id"] = user_id
+    if session_id:
+        params["session_id"] = session_id
+    with _client() as c:
+        r = c.get("/api/audit/redactions", params=params)
+        r.raise_for_status()
+        return r.json()
+
+
+def get_my_budget() -> dict[str, Any]:
+    """User's own budget. chemclaw2 enforces project_key == f'chemclaw2:{user_sub}'."""
+    project_key = f"chemclaw2:{_user_sub()}"
+    with _client() as c:
+        r = c.get(f"/api/budgets/{project_key}")
+        r.raise_for_status()
+        return r.json()
+
+
+def list_tool_permissions(
+    *, scope: str | None = None, scope_id: str | None = None
+) -> dict[str, Any]:
+    """ADMIN-ONLY on chemclaw2. Returns {permissions: [...]}."""
+    params: dict[str, Any] = {}
+    if scope:
+        params["scope"] = scope
+    if scope_id:
+        params["scope_id"] = scope_id
+    with _client() as c:
+        r = c.get("/api/admin/tool-permissions", params=params or None)
+        r.raise_for_status()
+        return r.json()
+
+
 def get_notifications(unread_only: bool = True, limit: int = 50) -> dict[str, Any]:
     """Fetch notifications. Returns {notifications: [...], unread_count: int}."""
     with _client() as c:

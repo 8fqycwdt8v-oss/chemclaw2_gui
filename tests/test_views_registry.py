@@ -23,9 +23,26 @@ def test_registry_discovers_known_views() -> None:
         "notifications",
         "wiki_revisions",
         "subscriptions",
+        "audit",
+        "budgets",
+        "tool_permissions",
     }
     missing = expected - set(VIEWS)
     assert not missing, f"Views not auto-discovered: {missing}"
+
+
+def test_admin_views_never_auto_pin() -> None:
+    """CLAUDE.md gotcha: admin / privileged views must matches() == False so
+    they don't crowd the dock for regular users. Quick-open is how to surface."""
+    admin_only = {"audit", "budgets", "tool_permissions"}
+    for view_id in admin_only:
+        view = VIEWS[view_id]
+        # Any non-empty state should also return False — admin gating doesn't
+        # depend on state, only on backend role.
+        assert view.matches({}) is False, f"{view_id} auto-pinned on empty state"
+        assert view.matches({"chat_recent_tool_uses": ["x"] * 100}) is False, (
+            f"{view_id} auto-pinned on rich state"
+        )
 
 
 def test_every_view_satisfies_the_contract() -> None:

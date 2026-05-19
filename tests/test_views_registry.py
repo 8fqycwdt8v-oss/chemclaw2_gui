@@ -14,9 +14,18 @@ from app.views._base import View
 
 
 def test_registry_discovers_known_views() -> None:
-    # Every starter view from the plan must be present.
-    for view_id in ("research", "campaign", "contradictions", "todos"):
-        assert view_id in VIEWS, f"View `{view_id}` was not auto-discovered"
+    # Every shipped view must be present.
+    expected = {
+        "research",
+        "campaign",
+        "contradictions",
+        "todos",
+        "notifications",
+        "wiki_revisions",
+        "subscriptions",
+    }
+    missing = expected - set(VIEWS)
+    assert not missing, f"Views not auto-discovered: {missing}"
 
 
 def test_every_view_satisfies_the_contract() -> None:

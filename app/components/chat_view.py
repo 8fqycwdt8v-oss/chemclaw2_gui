@@ -20,7 +20,7 @@ from typing import Any
 
 import streamlit as st
 
-from app.components.api_client import stream_chat
+from app.components.api_client import post_feedback, stream_chat
 from app.components.text_utils import extract_wiki_refs
 
 
@@ -185,11 +185,50 @@ def _request_cancel() -> None:
 
 def _render_history() -> None:
     """Replay the conversation transcript stored in session_state."""
+    assistant_seen = 0
     for i, (role, text) in enumerate(st.session_state.chat_history):
         with st.chat_message(role):
             st.markdown(text)
             if role == "assistant":
                 _render_wiki_refs(text, key_prefix=f"hist_{i}")
+                _render_feedback(turn_index=assistant_seen, key_prefix=f"hist_{i}")
+                assistant_seen += 1
+
+
+def _render_feedback(*, turn_index: int, key_prefix: str) -> None:
+    """👍/👎 buttons under each assistant turn. Submission is per-(session, turn)
+    deduped via session_state — re-rendering doesn't allow double-submission.
+
+    `turn_index` is the position within the assistant-only slice of history;
+    matches the chemclaw2 `agent_feedback.turn_index` column semantics.
+    """
+    submitted: dict[int, int] = st.session_state.setdefault("chat_feedback_submitted", {})
+    session_id = st.session_state.get("chat_session_id")
+    if not session_id:
+        return
+    if turn_index in submitted:
+        score = submitted[turn_index]
+        emoji = "👍" if score == 1 else "👎"
+        st.caption(f"{emoji} Feedback recorded — thanks!")
+        return
+
+    cols = st.columns([1, 1, 8])
+    with cols[0]:
+        if st.button("👍", key=f"{key_prefix}_fb_up", help="Helpful"):
+            _submit_feedback(session_id, turn_index, 1)
+    with cols[1]:
+        if st.button("👎", key=f"{key_prefix}_fb_down", help="Not helpful"):
+            _submit_feedback(session_id, turn_index, -1)
+
+
+def _submit_feedback(session_id: str, turn_index: int, score: int) -> None:
+    try:
+        post_feedback(session_id, turn_index, score)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"Feedback failed: {exc}")
+        return
+    st.session_state.chat_feedback_submitted[turn_index] = score
+    st.rerun()
 
 
 def _render_wiki_refs(text: str, *, key_prefix: str) -> None:

@@ -292,6 +292,93 @@ def get_wiki_revision(slug: str, version: int) -> dict[str, Any]:
         return r.json()
 
 
+def list_subscriptions() -> dict[str, Any]:
+    """Fetch the user's wiki subscriptions. Each row carries:
+    {page_id, slug, title, current_version, last_seen_version, created_at}."""
+    with _client() as c:
+        r = c.get("/api/wiki/subscriptions")
+        r.raise_for_status()
+        return r.json()
+
+
+def subscribe_wiki(slug: str) -> dict[str, Any]:
+    with _client() as c:
+        r = c.post(f"/api/wiki/{slug}/subscribe")
+        r.raise_for_status()
+        result: dict[str, Any] = r.json()
+    cached_subscription_slugs.clear()
+    return result
+
+
+def unsubscribe_wiki(slug: str) -> dict[str, Any]:
+    with _client() as c:
+        r = c.delete(f"/api/wiki/{slug}/subscribe")
+        r.raise_for_status()
+        result: dict[str, Any] = r.json()
+    cached_subscription_slugs.clear()
+    return result
+
+
+def mark_wiki_seen(slug: str, version: int) -> dict[str, Any]:
+    """Mark a wiki page as seen up to `version`. Backend rejects future versions."""
+    with _client() as c:
+        r = c.post(f"/api/wiki/{slug}/seen", json={"version": version})
+        r.raise_for_status()
+        result: dict[str, Any] = r.json()
+    cached_subscription_slugs.clear()  # last_seen_version changed; bust the badge cache
+    return result
+
+
+def cached_subscription_slugs() -> set[str]:
+    """Per-user cached set of subscribed slugs — used by the wiki view for
+    button-state rendering without a per-rerun network hit. Busted by
+    subscribe/unsubscribe/mark_seen."""
+    try:
+        return _cached_subscription_slugs_inner(user_sub=_user_sub())
+    except Exception:  # noqa: BLE001 — degrade to "not subscribed" pre-auth
+        return set()
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_subscription_slugs_inner(user_sub: str) -> set[str]:
+    del user_sub
+    try:
+        subs = list_subscriptions().get("subscriptions") or []
+    except Exception:  # noqa: BLE001
+        return set()
+    return {s["slug"] for s in subs if isinstance(s.get("slug"), str)}
+
+
+cached_subscription_slugs.clear = _cached_subscription_slugs_inner.clear  # type: ignore[attr-defined]
+
+
+def post_feedback(
+    session_id: str, turn_index: int, score: int, reason: str | None = None
+) -> dict[str, Any]:
+    """Score the agent's response. `score` is +1 (thumbs-up) or -1 (thumbs-down)."""
+    if score not in (1, -1):
+        raise ValueError("score must be 1 or -1")
+    body: dict[str, Any] = {
+        "session_id": session_id,
+        "turn_index": turn_index,
+        "score": score,
+    }
+    if reason:
+        body["reason"] = reason
+    with _client() as c:
+        r = c.post("/api/feedback", json=body)
+        r.raise_for_status()
+        return r.json()
+
+
+def get_session_feedback(session_id: str) -> dict[str, Any]:
+    """Returns {feedback: [{id, turn_index, score, reason, created_at}, ...]}."""
+    with _client() as c:
+        r = c.get(f"/api/feedback/{session_id}")
+        r.raise_for_status()
+        return r.json()
+
+
 def get_notifications(unread_only: bool = True, limit: int = 50) -> dict[str, Any]:
     """Fetch notifications. Returns {notifications: [...], unread_count: int}."""
     with _client() as c:

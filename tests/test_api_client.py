@@ -73,6 +73,19 @@ def test_auth_header_hmac_format(monkeypatch: pytest.MonkeyPatch) -> None:
     }
 
 
+def test_post_feedback_rejects_invalid_score(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Backend's FeedbackBody has score: Literal[1, -1]. Guard client-side so
+    # bad inputs fail fast with a clear message instead of a 422 round-trip.
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="score must be"):
+        api_client.post_feedback("session-1", 0, 0)
+    with _pytest.raises(ValueError, match="score must be"):
+        api_client.post_feedback("session-1", 0, 2)
+    with _pytest.raises(ValueError, match="score must be"):
+        api_client.post_feedback("session-1", 0, -2)
+
+
 def test_hmac_token_matches_chemclaw2_verifier_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

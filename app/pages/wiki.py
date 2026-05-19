@@ -7,10 +7,14 @@ from rdkit.Chem import AllChem, Draw
 from streamlit_ketcher import st_ketcher
 
 from app.components.api_client import (
+    cached_subscription_slugs,
     get_wiki_page,
     list_projects,
     list_wiki_pages,
+    mark_wiki_seen,
     patch_wiki_page,
+    subscribe_wiki,
+    unsubscribe_wiki,
     upsert_wiki_page,
 )
 from app.components.text_utils import relative_time
@@ -165,7 +169,7 @@ def _view_or_edit(slug: str) -> None:
     mode = st.session_state.get("wiki_mode", "view")
     dirty_key = f"wiki_dirty_{slug}"
 
-    col_back, col_edit = st.columns([1, 1])
+    col_back, col_edit, col_sub = st.columns([2, 1, 1])
     with col_back:
         if mode == "edit" and st.session_state.get(dirty_key):
             # Guarded back: require explicit Discard click while dirty.
@@ -182,6 +186,9 @@ def _view_or_edit(slug: str) -> None:
         if mode == "view" and st.button("✏️ Edit", type="primary"):
             st.session_state.wiki_mode = "edit"
             st.rerun()
+    with col_sub:
+        if mode == "view":
+            _subscribe_button(slug)
 
     if mode == "view":
         st.title(title)
@@ -189,8 +196,52 @@ def _view_or_edit(slug: str) -> None:
         _metadata_expander(slug, page)
         _render_blocks(markdown, key_prefix=f"view_{slug}")
         _citations_footer(page)
+        _auto_mark_seen(slug, page)
     else:
         _edit_form(slug, title, markdown)
+
+
+def _subscribe_button(slug: str) -> None:
+    """Toggle subscription for the current page."""
+    subscribed = slug in cached_subscription_slugs()
+    if subscribed:
+        if st.button("🔕 Unsubscribe", key=f"unsub_{slug}"):
+            try:
+                unsubscribe_wiki(slug)
+            except httpx.HTTPError as exc:
+                st.error(f"Unsubscribe failed: {exc}")
+                return
+            st.rerun()
+    else:
+        if st.button("🔔 Subscribe", key=f"sub_{slug}"):
+            try:
+                subscribe_wiki(slug)
+            except httpx.HTTPError as exc:
+                st.error(f"Subscribe failed: {exc}")
+                return
+            st.rerun()
+
+
+def _auto_mark_seen(slug: str, page: dict) -> None:
+    """Mark the current page version as seen when the user opens it.
+
+    Only fires once per (slug, version) per Streamlit session to avoid spamming
+    the backend on every rerun, and only for pages the user is subscribed to —
+    no-op for the unsubscribed case.
+    """
+    if slug not in cached_subscription_slugs():
+        return
+    version = page.get("version")
+    if not isinstance(version, int):
+        return
+    key = f"wiki_seen_{slug}_{version}"
+    if st.session_state.get(key):
+        return
+    try:
+        mark_wiki_seen(slug, version)
+    except httpx.HTTPError:
+        return  # silent — best-effort
+    st.session_state[key] = True
 
 
 def _freshness_header(page: dict) -> None:
